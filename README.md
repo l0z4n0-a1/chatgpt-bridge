@@ -170,46 +170,93 @@ Response shape (matches OpenAI Images API exactly):
 ### As a library
 
 ```ts
-import { generateImage, Auth, Upstream, loadConfig } from "chatgpt-bridge";
+import {
+  generateImage,
+  Auth,
+  Upstream,
+  loadConfig,
+  CAPABILITIES,
+  runInstall,
+  resolveAttachments,
+  translateChatMessages,
+} from "chatgpt-bridge";
 
+// Generate an image, with optional reference images
 const cfg = loadConfig();
 const upstream = new Upstream(cfg, new Auth(cfg));
 const img = await generateImage(cfg, upstream, {
-  prompt: "a serene mountain landscape at dawn",
-  size: "1024x1024",
+  prompt: "hero shot, brand-consistent",
+  reference_images: ["./moodboard.png", "./logo.svg"],
+  size: "1536x1024",
   quality: "high",
 });
-// img.b64        → base64 PNG string
+// img.b64           → base64 PNG string
 // img.revisedPrompt → optional, may differ from input prompt
-// img.usage      → token usage from upstream
+// img.usage         → token usage from upstream
+
+// Programmatic install (writes the IDE's MCP config)
+const result = await runInstall("claude-code");
+
+// Inspect the agent-facing surface
+console.log(CAPABILITIES.verbs.map((v) => v.name));
+
+// Build a Responses-shaped input from OpenAI Chat-shape messages
+const input = await translateChatMessages(messages, cfg);
 ```
 
 ### CLI
 
+Eight verbs. JSON to stdout when piped or `--json`; structured remedies on errors.
+
 ```
-chatgpt-bridge serve              Start the local proxy server
-chatgpt-bridge gen <prompt>       Generate one image to a file (one-shot)
-chatgpt-bridge mcp                Run as an MCP server (Claude Desktop / Cursor / Zed)
-chatgpt-bridge doctor             Health checks; exit 0 if healthy
-chatgpt-bridge login              Run `npx @openai/codex login`
-chatgpt-bridge version            Print version + runtime info
+chatgpt-bridge install --for <target>   Register the bridge with an IDE/agent (idempotent)
+chatgpt-bridge capabilities              Print the full machine-readable catalog
+chatgpt-bridge chat <prompt|@file|->     Send a text or multimodal message
+chatgpt-bridge image <prompt|@file|->    Generate an image (with optional --ref)
+chatgpt-bridge models                    List available chat + image models
+chatgpt-bridge serve                     Start the OpenAI-compatible HTTP server
+chatgpt-bridge mcp                       Run as a Model Context Protocol server (stdio)
+chatgpt-bridge doctor                    Health checks; exit 0 if healthy
 ```
+
+`install --for <target>` accepts: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `gemini-cli`, `aider`, `openai-sdk`, `all`. Add `--dry-run` to preview, `--uninstall` to revert.
 
 #### Examples
 
 ```bash
-# Start the server (default :10531)
-chatgpt-bridge serve
+# One-shot setup (the rest is agent-driven)
+chatgpt-bridge install --for claude-code
 
-# One-shot image to a file
-chatgpt-bridge gen "a small red fox under an oak tree, watercolor" --out fox.png
+# Text only
+chatgpt-bridge chat "explain REST in one sentence"
 
-# Use a different port
-chatgpt-bridge serve --port 11000
+# Vision — what's in this image?
+chatgpt-bridge chat "what font is this?" --attach screenshot.png
 
-# Check health
+# File as context
+chatgpt-bridge chat "audit this spec against OpenAPI 3.1" --attach spec.md
+
+# Image generation
+chatgpt-bridge image "a small red fox under an oak tree, watercolor" --out fox.png
+
+# Image with reference (style/composition transfer)
+chatgpt-bridge image "hero shot, brand-consistent" \
+  --ref moodboard.png --ref logo.svg --out hero.png
+
+# Batch via stdin JSONL (each line = one job, each result = one JSON line)
+chatgpt-bridge image - <<EOF
+{"prompt":"hero v1","ref":["mood.png"],"out":"v1.png"}
+{"prompt":"hero v2","ref":["mood.png"],"out":"v2.png","quality":"medium"}
+EOF
+
+# Health check
 chatgpt-bridge doctor
+
+# Start the OpenAI-SDK-compatible server
+chatgpt-bridge serve --port 11000
 ```
+
+`gen <prompt>` is a deprecated alias for `image`; prints a stderr warning and forwards.
 
 ---
 
@@ -229,9 +276,39 @@ Working snippets for the most common tools:
 | **Claude Desktop / Cursor / Zed (MCP)** | [#use-with-claude-desktop-cursor-zed-mcp](#use-with-claude-desktop-cursor-zed-mcp) |
 | **curl + jq** | [examples/curl.sh](./examples/curl.sh) |
 
+### One-shot install (agent-native)
+
+You don't have to hand-edit any config. Tell your agent:
+
+> *"Install chatgpt-bridge."*
+
+It runs:
+
+```bash
+npx chatgpt-bridge install --for claude-code   # or codex, cursor, zed, cline, continue, claude-desktop, gemini-cli, openai-sdk, aider, all
+```
+
+The command is idempotent: detects the target's config file location, merges the `chatgpt-bridge` entry, and reports back as JSON. Add `--dry-run` to preview; `--uninstall` to revert. Use `--for all` to register with every IDE detected on disk in one shot.
+
+Targets covered: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `gemini-cli`, `aider` (snippet), `openai-sdk` (snippet), `all`.
+
+### What an agent should read first
+
+```bash
+chatgpt-bridge capabilities
+```
+
+Returns the entire surface as a single JSON document: every verb, args, returns, idempotency, side effects, typical latency, and structured error remedies. Agents read it once at session start and need nothing else.
+
 ### Use with Claude Desktop / Cursor / Zed (MCP)
 
-The bridge ships a [Model Context Protocol](https://modelcontextprotocol.io) server. Add it to your client config:
+After `chatgpt-bridge install --for <target>`, restart the IDE. Three MCP tools become available:
+
+- `chat(prompt, system?, model?, attachments?)` — assistant reply as plain text. `attachments` accepts paths or URLs; images become vision input, text files become contextual file_data.
+- `generate_image(prompt, out?, size?, quality?, references?)` — saves a PNG, returns the absolute path. `references` (up to 8) shape the output's style/composition.
+- `health()` — bridge state snapshot.
+
+If you'd rather configure manually, the MCP entry is:
 
 ```json
 {
@@ -243,14 +320,6 @@ The bridge ships a [Model Context Protocol](https://modelcontextprotocol.io) ser
   }
 }
 ```
-
-Restart your MCP client. Three tools become available:
-
-- `generate_image(prompt, out?, size?, quality?)` — saves a PNG, returns the path.
-- `chat(prompt, system?, model?)` — assistant reply as plain text.
-- `health()` — bridge state snapshot.
-
-That's it. No HTTP, no port, no API key — Claude Desktop can now generate images using the user's ChatGPT subscription.
 
 Full integrations guide: [docs/integrations.md](./docs/integrations.md).
 
@@ -319,7 +388,7 @@ Full security model: [docs/security.md](./docs/security.md).
 
 ## Contributing
 
-The codebase is intentionally small (~900 LOC across 7 files). Read it end to end before opening a PR.
+The codebase is intentionally small (~1.7k LOC of source across 11 files; reads end-to-end in under an hour). Read it before opening a PR.
 
 ```bash
 git clone https://github.com/l0z4n0-a1/chatgpt-bridge.git

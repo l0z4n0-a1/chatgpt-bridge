@@ -1,6 +1,106 @@
 # Integrations
 
-Working snippets for popular tools.
+Working snippets for popular tools. The HTTP API is OpenAI-compatible; bridge-specific extensions are flagged inline.
+
+## Multimodal (vision + file context + reference images)
+
+These work both via the OpenAI HTTP API and via the CLI / MCP.
+
+### Vision (image as context)
+
+```python
+# Python — standard OpenAI vision shape
+import base64
+from openai import OpenAI
+
+c = OpenAI(base_url="http://127.0.0.1:10531/v1", api_key="unused")
+
+with open("screenshot.png", "rb") as f:
+    b64 = base64.b64encode(f.read()).decode()
+
+resp = c.chat.completions.create(
+    model="gpt-5.2",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What font is this?"},
+            {"type": "image_url",
+             "image_url": {"url": f"data:image/png;base64,{b64}"}},
+        ],
+    }],
+)
+print(resp.choices[0].message.content)
+```
+
+```bash
+# CLI — same thing
+chatgpt-bridge chat "What font is this?" --attach screenshot.png
+```
+
+### File as context (bridge extension)
+
+```python
+# Python — bridge-extension content part: {type:"input_file", file:{path|url|data,mime,filename}}
+resp = c.chat.completions.create(
+    model="gpt-5.2",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Audit this spec against OpenAPI 3.1."},
+            {"type": "input_file", "file": {"path": "./spec.md"}},
+        ],
+    }],
+    extra_body={},  # bridge accepts the unknown content type natively
+)
+```
+
+```bash
+# CLI — same thing
+chatgpt-bridge chat "Audit this spec against OpenAPI 3.1" --attach spec.md
+```
+
+> **Bridge extension note:** the `input_file` content part is not portable to `api.openai.com`. Code that uses it speaks to the bridge specifically. Vision (`image_url`) is standard OpenAI and works against either endpoint.
+
+### Reference images for generation (bridge extension)
+
+```python
+# Python — bridge-extension `reference_images[]` field
+img = c.images.generate(
+    model="gpt-image-2",
+    prompt="hero shot, brand-consistent, premium aesthetic",
+    size="1536x1024",
+    quality="high",
+    extra_body={"reference_images": ["./moodboard.png", "./logo.svg"]},
+)
+```
+
+```bash
+# CLI — same thing
+chatgpt-bridge image "hero shot, brand-consistent, premium aesthetic" \
+  --ref moodboard.png --ref logo.svg \
+  --size 1536x1024 --out hero.png
+```
+
+> **Bridge extension note:** `reference_images[]` is not a standard OpenAI Images field. Use the standard prompt-only call if you also need to target `api.openai.com`.
+
+### Batch via stdin (CLI / shell)
+
+```bash
+# 5 ad creative variations from a single moodboard
+for i in 1 2 3 4 5; do
+  chatgpt-bridge image "creative variation $i, premium aesthetic" \
+    --ref moodboard.png --quality high --out "out/v$i.png" --json &
+done | jq -s
+
+# Or JSONL: one job per line
+chatgpt-bridge image - <<'EOF'
+{"prompt":"hero v1","ref":["mood.png"],"out":"v1.png"}
+{"prompt":"hero v2","ref":["mood.png"],"out":"v2.png","quality":"medium"}
+{"prompt":"hero v3","ref":["mood.png","logo.svg"],"out":"v3.png"}
+EOF
+```
+
+---
 
 ## OpenAI Python SDK
 

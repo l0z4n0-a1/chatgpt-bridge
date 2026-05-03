@@ -1,18 +1,25 @@
 /**
- * HTTP server. Six routes, all in this file. Total ~150 lines.
+ * HTTP server. Six routes, all defined inline by intent.
  *
  *   GET  /health                  — auth + rate snapshot
  *   GET  /v1/models               — list models (with synthetic image aliases)
  *   POST /v1/responses            — pass-through with body normalization
- *   POST /v1/chat/completions     — thin Chat→Responses translator
- *   POST /v1/images/generations   — generate image via image_generation tool
- *   ALL  /v1/*                    — passthrough for forward-compat
+ *   POST /v1/chat/completions     — Chat→Responses translator (multimodal-aware)
+ *   POST /v1/images/generations   — generate image via image_generation tool;
+ *                                   accepts `reference_images[]` (bridge ext)
+ *   ALL  /v1/*                    — pass-through for forward-compat
+ *
+ * Bridge extensions (non-portable to api.openai.com):
+ *   - `reference_images: AttachmentSpec[]` on /v1/images/generations
+ *   - `{type:"input_file", file:{path|url|data,mime,filename}}` content part
+ *     on /v1/chat/completions
  */
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { AttachmentError, resolveAttachment } from "./attachments.ts";
 import { Auth, tokenExpiryMs } from "./auth.ts";
-import type { Config } from "./config.ts";
+import { type Config, DEFAULT_CHAT_MODEL } from "./config.ts";
 import { ImageRequest, generateImage } from "./images.ts";
 import type { UpstreamError } from "./upstream.ts";
 import { Upstream, normalizeResponsesBody, parseSSE } from "./upstream.ts";
@@ -39,6 +46,101 @@ function errBody(message: string, code: string, status: number) {
 function asResponse(c: any, body: ReturnType<typeof errBody>) {
 	const { _status, ...rest } = body;
 	return c.json(rest, _status);
+}
+
+/**
+ * Translate OpenAI Chat Completions messages → Responses API input.
+ *
+ * Mapping:
+ *   - role: "system" → "developer"; "tool" → "user"; others unchanged.
+ *   - content: string → unchanged (works on both shapes).
+ *   - content: array of parts → mapped per-part:
+ *       { type: "text",       text }         → { type: "input_text",  text }
+ *       { type: "image_url",  image_url }    → { type: "input_image", image_url }
+ *       { type: "input_text"|"input_image"|"input_file" }  → unchanged (Responses-native)
+ *       { type: "input_file", file: { path | url | data, mime, filename } }
+ *           → resolve via resolveAttachment, emit `input_file` content part.
+ *       unknown types → passed through (forward-compat).
+ */
+export async function translateChatMessages(
+	messages: Array<{ role: string; content: unknown }>,
+	cfg: Config,
+): Promise<Array<Record<string, unknown>>> {
+	const out: Array<Record<string, unknown>> = [];
+	for (const m of messages) {
+		const role = m.role === "system" ? "developer" : m.role === "tool" ? "user" : m.role;
+
+		// Plain string content: pass through.
+		if (typeof m.content === "string") {
+			out.push({ role, content: m.content });
+			continue;
+		}
+
+		if (!Array.isArray(m.content)) {
+			out.push({ role, content: m.content });
+			continue;
+		}
+
+		const parts: Array<Record<string, unknown>> = [];
+		for (const raw of m.content as Array<Record<string, unknown>>) {
+			const t = raw?.type;
+			if (t === "text") {
+				parts.push({ type: "input_text", text: raw.text });
+				continue;
+			}
+			if (t === "image_url") {
+				const ref = raw.image_url as string | { url: string } | undefined;
+				const url = typeof ref === "string" ? ref : ref?.url;
+				if (typeof url !== "string" || url.length === 0) {
+					throw new AttachmentError("image_url part missing url", "ATTACH_BAD_SHAPE");
+				}
+				parts.push({ type: "input_image", image_url: url });
+				continue;
+			}
+			if (t === "input_file" && raw.file && typeof raw.file === "object") {
+				const file = raw.file as {
+					path?: string;
+					url?: string;
+					data?: string;
+					mime?: string;
+					filename?: string;
+				};
+				const spec = file.path
+					? { path: file.path }
+					: file.url
+						? { url: file.url }
+						: file.data && file.mime
+							? {
+									data: file.data,
+									mime: file.mime,
+									...(file.filename ? { filename: file.filename } : {}),
+								}
+							: undefined;
+				if (!spec) {
+					throw new AttachmentError(
+						"input_file part requires file.path, file.url, or file.data+mime",
+						"ATTACH_BAD_SHAPE",
+					);
+				}
+				const resolved = await resolveAttachment(spec, {}, cfg);
+				if (resolved.kind === "image") {
+					parts.push({ type: "input_image", image_url: resolved.imageUrl });
+				} else {
+					parts.push({
+						type: "input_file",
+						filename: resolved.filename,
+						file_data: resolved.fileData,
+					});
+				}
+				continue;
+			}
+			// Unknown / Responses-native part: pass through verbatim so future
+			// content types from upstream just work without a bridge release.
+			parts.push(raw);
+		}
+		out.push({ role, content: parts });
+	}
+	return out;
 }
 
 export function createApp(cfg: Config) {
@@ -143,15 +245,26 @@ export function createApp(cfg: Config) {
 			return asResponse(c, errBody("messages must be an array", "BAD_REQUEST", 400));
 		}
 		const wantStream = body.stream === true;
+		// Translate Chat Completions messages → Responses input.
+		// Multimodal content parts (image_url, input_file, etc.) are mapped to
+		// their Responses equivalents. Bridge extension: `input_file` content
+		// parts may use { file: { path | url | data, mime } } and we resolve
+		// path/data into a base64 data URL on the fly.
+		let translatedInput: Array<Record<string, unknown>>;
+		try {
+			translatedInput = await translateChatMessages(body.messages, cfg);
+		} catch (e) {
+			if (e instanceof AttachmentError) {
+				return asResponse(c, errBody(e.message, e.code, 400));
+			}
+			throw e;
+		}
 		// Upstream Codex /responses requires stream:true. Always force it; if the
 		// caller wanted non-stream, we aggregate the SSE and return a single Chat
 		// completion object.
 		const upstreamBody: Record<string, unknown> = {
-			model: body.model ?? "gpt-5.2",
-			input: body.messages.map((m: any) => ({
-				role: m.role === "system" ? "developer" : m.role === "tool" ? "user" : m.role,
-				content: m.content,
-			})),
+			model: body.model ?? DEFAULT_CHAT_MODEL,
+			input: translatedInput,
 			stream: true,
 			store: false,
 			instructions: "",
@@ -184,7 +297,7 @@ export function createApp(cfg: Config) {
 					id: `chatcmpl_${crypto.randomUUID()}`,
 					object: "chat.completion",
 					created: Math.floor(Date.now() / 1000),
-					model: body.model ?? "gpt-5.2",
+					model: body.model ?? DEFAULT_CHAT_MODEL,
 					choices: [
 						{
 							index: 0,
@@ -211,7 +324,7 @@ export function createApp(cfg: Config) {
 												id,
 												object: "chat.completion.chunk",
 												created: Math.floor(Date.now() / 1000),
-												model: body.model ?? "gpt-5.2",
+												model: body.model ?? DEFAULT_CHAT_MODEL,
 												choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
 											})}\n\n`,
 										),
@@ -225,7 +338,7 @@ export function createApp(cfg: Config) {
 											id,
 											object: "chat.completion.chunk",
 											created: Math.floor(Date.now() / 1000),
-											model: body.model ?? "gpt-5.2",
+											model: body.model ?? DEFAULT_CHAT_MODEL,
 											choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
 										})}\n\n`,
 									),
@@ -337,7 +450,7 @@ export function createApp(cfg: Config) {
 	return { app, auth, upstream };
 }
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 
 // Re-exported with this constant; /health and CLI both use it.
 // Bumping a release: change here + package.json + CHANGELOG.md.

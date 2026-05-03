@@ -23,7 +23,7 @@ const r = await Bun.build({
 	// No sourcemaps: keeps the published tarball small and avoids shipping
 	// embedded source. The repo is public anyway — debug from there.
 	sourcemap: "none",
-	external: ["@hono/node-server", "hono", "commander", "zod"],
+	external: ["@hono/node-server", "hono", "commander", "zod", "@modelcontextprotocol/sdk"],
 	naming: { entry: "[dir]/[name].js" },
 });
 

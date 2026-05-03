@@ -12,4 +12,6 @@ auth.json
 bun.lock
 test-output*.png
 sdk-test*.png
+chatgpt-bridge-*.png
+.qa/
 *.tgz

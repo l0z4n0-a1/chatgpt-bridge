@@ -21,8 +21,10 @@ img = c.images.generate(model="gpt-image-2", prompt="a fox")
 - Speaks the OpenAI API dialect — your existing OpenAI SDK code Just Works.
 - Auth file lives at `~/.codex/auth.json`. **Never read or echo its contents.**
 - The bridge has zero outbound traffic except to `chatgpt.com` and `auth.openai.com`.
-- `chatgpt-bridge doctor` returns JSON with health status. Use it to verify before retrying.
-- All CLI commands write JSON to stdout. Errors go to stderr.
+- `chatgpt-bridge doctor` returns JSON with health status, including a `remedy[]` array when checks fail. Use it to verify before retrying.
+- `chatgpt-bridge capabilities` returns the full machine-readable catalog (verbs, args, returns, idempotency, side effects, errors). **Read this once at session start.**
+- `chatgpt-bridge install --for <target>` registers the bridge with an IDE (claude-code, claude-desktop, codex, cursor, zed, cline, continue, aider, gemini-cli, openai-sdk, all). Idempotent.
+- All CLI commands write JSON to stdout. Errors go to stderr with structured `remedy` fields.
 
 ## Tools surface (for agent runtimes)
 
@@ -39,7 +41,10 @@ img = c.images.generate(model="gpt-image-2", prompt="a fox")
 }
 ```
 
-Exposes 3 tools: `generate_image`, `chat`, `health`.
+Exposes 3 tools (mirrors of the CLI surface):
+- `chat(prompt, system?, model?, attachments?)` — text or multimodal message; optional file/image attachments.
+- `generate_image(prompt, out?, size?, quality?, references?)` — generate PNG; optional reference images shape style.
+- `health()` — bridge state snapshot.
 
 ### HTTP API (any OpenAI SDK)
 
@@ -55,10 +60,32 @@ Exposes 3 tools: `generate_image`, `chat`, `health`.
 ### CLI (one-shot, no server needed)
 
 ```bash
+chatgpt-bridge install --for claude-code     # one-shot, idempotent, agent-native setup
+chatgpt-bridge capabilities                   # full catalog as JSON (read this once)
 chatgpt-bridge gen "a tiny dragon" --out dragon.png
-chatgpt-bridge doctor   # exit 0 if healthy
-chatgpt-bridge version  # JSON
+chatgpt-bridge doctor                         # exit 0 if healthy; emits remedy[] otherwise
+chatgpt-bridge version                        # JSON
 ```
+
+### Agent-native install targets
+
+Run `chatgpt-bridge install --for <target>` to register without hand-editing config:
+
+| target | writes to |
+|---|---|
+| `claude-code` | `~/.claude.json` (mcpServers entry) |
+| `claude-desktop` | `~/Library/Application Support/Claude/claude_desktop_config.json` (mac) / `%APPDATA%/Claude/...` (win) / `~/.config/Claude/...` (linux) |
+| `codex` | `~/.codex/config.toml` (mcp_servers block) |
+| `cursor` | `~/.cursor/mcp.json` |
+| `zed` | `~/.config/zed/settings.json` |
+| `cline` | VS Code globalStorage settings |
+| `continue` | `~/.continue/config.json` |
+| `gemini-cli` | `~/.gemini/settings.json` |
+| `aider` | (snippet only — no MCP) |
+| `openai-sdk` | (snippet only — sets `base_url`) |
+| `all` | every detected runtime; skips absent ones |
+
+Add `--dry-run` to preview, `--uninstall` to remove. All operations are idempotent.
 
 ## Documentation
 
@@ -74,7 +101,7 @@ chatgpt-bridge version  # JSON
 - Repo: https://github.com/l0z4n0-a1/chatgpt-bridge
 - npm: https://www.npmjs.com/package/chatgpt-bridge
 - License: MIT
-- ~900 LOC across 8 source files. Read top-to-bottom in 30 minutes.
+- ~1.7k LOC across 11 source files. Read top-to-bottom in under an hour.
 
 ## What you should NOT do as an agent
 

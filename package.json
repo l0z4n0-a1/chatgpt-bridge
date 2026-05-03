@@ -1,6 +1,6 @@
 {
 	"name": "chatgpt-bridge",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Localhost OpenAI-compatible HTTP proxy that uses your ChatGPT subscription via OAuth — including image generation (gpt-image-2).",
 	"keywords": [
 		"chatgpt",

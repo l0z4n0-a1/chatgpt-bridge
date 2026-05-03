@@ -4,12 +4,13 @@ Pick the one that matches your tool. Every example expects `chatgpt-bridge serve
 
 | File | Tool |
 |---|---|
-| [python.py](./python.py) | OpenAI Python SDK |
-| [node.ts](./node.ts) | OpenAI Node SDK |
+| [python.py](./python.py) | OpenAI Python SDK — image generation |
+| [node.ts](./node.ts) | OpenAI Node SDK — image generation |
+| [multimodal.py](./multimodal.py) | OpenAI Python SDK — vision, file context, reference images |
 | [curl.sh](./curl.sh) | curl + jq + base64 |
 | [library.ts](./library.ts) | direct library use, no HTTP |
 | [n8n.json](./n8n.json) | importable n8n workflow |
-| [claude-code-skill/](./claude-code-skill/) | Claude Code Skill |
+| [claude-code-skill/](./claude-code-skill/) | Claude Code Skill (chat + image + attachments) |
 
 ## Setup once
 

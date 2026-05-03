@@ -1,6 +1,6 @@
 # Claude Code Skill — chatgpt-bridge
 
-This is a Claude Code [Skill](https://docs.anthropic.com/en/docs/claude-code/skills) that lets Claude generate images for you, in any project, using your own ChatGPT subscription.
+A Claude Code [Skill](https://docs.anthropic.com/en/docs/claude-code/skills) that lets Claude reach the user's ChatGPT subscription for chat (with optional image/file context) and image generation (with optional reference images).
 
 ## Install
 
@@ -8,29 +8,56 @@ Copy this directory into your Claude Code skills folder:
 
 ```bash
 mkdir -p ~/.claude/skills
-cp -r ./examples/claude-code-skill ~/.claude/skills/chatgpt-bridge-image
+cp -r ./examples/claude-code-skill ~/.claude/skills/chatgpt-bridge
 ```
 
-(Or symlink it if you want to track upstream updates.)
+Or symlink to track upstream:
+
+```bash
+ln -s "$(pwd)/examples/claude-code-skill" ~/.claude/skills/chatgpt-bridge
+```
 
 Then restart Claude Code.
+
+## Prereqs
+
+```bash
+# Install the CLI (or use `npx chatgpt-bridge` ad-hoc)
+npm i -g chatgpt-bridge
+
+# One-time auth
+npx @openai/codex login
+```
 
 ## Use
 
 Just ask Claude:
 
-> "Generate an image of a tiny dragon perched on a stack of books and save it as `dragon.png`."
+> *"What font does this screenshot use?"* (drop a PNG)
+>
+> *"Audit this OpenAPI spec for breaking changes."* (drop a `.md`)
+>
+> *"Generate a hero shot in this style."* (drop a moodboard, ask for variations)
+>
+> *"Make 5 social-card variations from this brand kit."*
 
 Claude will:
 
-1. Verify `chatgpt-bridge` is running (start it if not).
-2. POST your prompt to `http://127.0.0.1:10531/v1/images/generations`.
-3. Decode the base64 PNG and save it.
-4. Tell you where the file is.
+1. Run `chatgpt-bridge doctor` — surface auth fixes if needed.
+2. Read `chatgpt-bridge capabilities` — discover the exact surface.
+3. Call `chatgpt-bridge chat …` or `chatgpt-bridge image …` with the right `--attach` / `--ref` flags.
+4. Surface the result (text reply, or absolute path of the saved PNG).
 
-## Prereqs
+## Alternative: native MCP
 
-- [chatgpt-bridge](https://github.com/l0z4n0-a1/chatgpt-bridge) installed (`npm i -g chatgpt-bridge` or use `npx`).
-- One-time auth: `npx @openai/codex login`.
+If you'd rather skip the skill and let Claude Code use the bridge as an MCP server (`chat`, `generate_image`, `health` tools become callable directly):
 
-That's it.
+```bash
+chatgpt-bridge install --for claude-code
+```
+
+That writes the MCP entry to `~/.claude.json` (idempotent, preserves all your other settings). Restart Claude Code. The skill and the MCP path coexist — pick whichever you prefer per session.
+
+## License
+
+MIT, same as the parent project.

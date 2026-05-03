@@ -12,7 +12,7 @@ The whole thing fits on a napkin.
                │  (OpenAI dialect)
                ▼
 ┌────────────────────────────────────────────────┐
-│  chatgpt-bridge (this package, ~900 LOC)       │
+│  chatgpt-bridge (this package, ~1.7k LOC)      │
 │  ┌──────────────────────────────────────────┐  │
 │  │ Hono router                              │  │
 │  │   /v1/images/generations  ─► images.ts   │  │
@@ -86,15 +86,20 @@ The Codex endpoint (`/backend-api/codex/responses`) is different: it's the same 
 
 | File | LOC | Purpose |
 |---|---|---|
-| `src/cli.ts` | ~120 | Commander entry: `serve / gen / doctor / login / version` |
-| `src/server.ts` | ~270 | Hono app with all routes inline |
-| `src/auth.ts` | ~210 | Token load / decode / refresh / persist |
-| `src/upstream.ts` | ~120 | Single fetch wrapper + SSE parser + body normalizer |
-| `src/images.ts` | ~110 | Translate Images request → Responses tool call → extract b64 |
-| `src/config.ts` | ~70 | Defaults + env var overrides + auth-file lookup order |
-| `src/index.ts` | ~20 | Public library API |
+| `src/cli.ts` | ~620 | Commander entry: 8 verbs + deprecated `gen` alias. JSON output discipline, `@file` resolution, JSONL stdin batch, `--dry-run`. |
+| `src/server.ts` | ~470 | Hono app with all routes inline; `translateChatMessages` for vision/file content parts. |
+| `src/install.ts` | ~440 | `install --for <ide>` — 10 adaptors + cross-platform paths. Refuses to overwrite non-JSON config files. |
+| `src/attachments.ts` | ~350 | Path/URL/data-URL resolver. MIME via extension + magic bytes. Path traversal + auth-file guard. 25 MiB / 100 MiB caps. |
+| `src/capabilities.ts` | ~340 | Single-source-of-truth machine-readable catalog (verbs, args, returns, idempotency, side effects, errors with structured remedies). |
+| `src/auth.ts` | ~250 | Token load / decode / refresh / persist (RFC 6749). |
+| `src/mcp.ts` | ~270 | MCP server (stdio); 3 tools mirror the CLI surface. |
+| `src/upstream.ts` | ~120 | Single fetch wrapper + SSE parser + body normalizer. |
+| `src/io.ts` | ~110 | I/O helpers: `@file` resolution, JSONL stdin parser, JSON stdout, structured stderr errors, exit-code classification. |
+| `src/images.ts` | ~140 | Images-API request → `/responses` `image_generation` tool call. Refs become `input_image` parts; `tool_choice` flips to `auto`. |
+| `src/config.ts` | ~80 | Defaults + env var overrides + auth-file lookup order. `DEFAULT_CHAT_MODEL` lives here. |
+| `src/index.ts` | ~30 | Public library API. |
 
-Read top to bottom in 30 minutes. No magic, no clever abstractions, no DI containers. Each file does one thing.
+Reads end-to-end in under an hour. No magic, no clever abstractions, no DI containers. Each file does one thing.
 
 ## Concurrency model
 
