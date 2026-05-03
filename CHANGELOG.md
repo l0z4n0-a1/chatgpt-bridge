@@ -2,6 +2,21 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added — agent-native core
+
+- **`chatgpt-bridge install --for <target>`** — one-shot, idempotent registration with 10 IDE/agent runtimes: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `aider`, `gemini-cli`, `openai-sdk`, plus `all` (auto-detects installed runtimes, skips absent ones). Supports `--dry-run` and `--uninstall`. Agents never have to hand-edit MCP/config files again.
+- **`chatgpt-bridge capabilities`** — machine-readable capability catalog. Returns a single JSON document describing every verb, args, returns, idempotency, side effects, typical latency, errors with structured `remedy`. Agents read once, know everything.
+- **`doctor` remedies** — when checks fail, output now includes a `remedy[]` array with executable next steps (`{check, cmd, interactive?, why?}`). Replaces the need for separate `auth`/`login` verbs in agent flows.
+- **Library exports** — `runInstall`, `CAPABILITIES`, `CAPABILITY_VERB_NAMES`, plus `InstallTarget`, `InstallResult`, `InstallOptions` types.
+
+### Internal
+
+- New module `src/capabilities.ts` (~280 LOC) — single source of truth for the agent-facing surface. A test (`test/capabilities.test.ts`) asserts catalog ↔ implementation parity.
+- New module `src/install.ts` (~290 LOC) — 10 adaptor implementations behind a uniform `runInstall(target, options)` entry point. Cross-platform path resolution (mac / linux / windows) for every target's config file.
+- 15 new tests covering install round-trips (write → re-install idempotent → uninstall preserves other keys), `--dry-run`, `--for all` skip behavior on bare environments, and full catalog coverage.
+
 ## [0.2.0] — 2026-05-03
 
 ### Added

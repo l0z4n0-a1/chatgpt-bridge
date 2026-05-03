@@ -63,6 +63,18 @@ bun run dev         # run from source: chatgpt-bridge serve
 4. Update `llms.txt` MCP tools list.
 5. Update `README.md` MCP section.
 
+### "Add a new `install --for <target>` adaptor"
+
+1. Add the target name to the `Target` union in `src/install.ts`.
+2. Add a `pathXxx()` helper next to the others, returning the absolute config-file path. Cover mac/linux/windows via `appDataDir()` if the target is a GUI app.
+3. Wire the new path into the `installSingle()` switch (uses `applyMcpJson()` for JSON-MCP targets; write a dedicated function only if the target's config format is exotic, like `applyCodexToml()`).
+4. Add the target to the `candidates` array in `runInstall()` so `--for all` picks it up; or skip it if the target is snippet-only (like `openai-sdk`).
+5. Add the target to `CAPABILITIES.verbs[install].args.for.values` in `src/capabilities.ts` and to the `--for` description in `src/cli.ts`.
+6. Add an entry to the `install` test suite in `test/install.test.ts` (round-trip: install → idempotent re-install → uninstall preserves other keys).
+7. Document the target in `llms.txt` install table and `README.md`.
+
+Adaptor budget: ~30 LOC each. If you need more, the target's config format is wrong for our model — file an issue first.
+
 ### "Bump the version"
 
 See [docs/releasing.md](./docs/releasing.md) — three places need updating: `package.json`, `src/server.ts` `VERSION` constant, `CHANGELOG.md`.

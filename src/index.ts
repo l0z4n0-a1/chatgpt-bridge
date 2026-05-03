@@ -17,3 +17,7 @@ export { generateImage, ImageRequest } from "./images.ts";
 export type { ImageResult } from "./images.ts";
 export { createApp, startServer, VERSION } from "./server.ts";
 export { Upstream, UpstreamError, normalizeResponsesBody, parseSSE } from "./upstream.ts";
+export { CAPABILITIES, CAPABILITY_VERB_NAMES } from "./capabilities.ts";
+export type { Capabilities, CapabilityVerb, CapabilityArg } from "./capabilities.ts";
+export { runInstall } from "./install.ts";
+export type { Target as InstallTarget, InstallResult, InstallOptions } from "./install.ts";

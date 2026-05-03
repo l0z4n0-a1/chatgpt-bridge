@@ -229,9 +229,39 @@ Working snippets for the most common tools:
 | **Claude Desktop / Cursor / Zed (MCP)** | [#use-with-claude-desktop-cursor-zed-mcp](#use-with-claude-desktop-cursor-zed-mcp) |
 | **curl + jq** | [examples/curl.sh](./examples/curl.sh) |
 
+### One-shot install (agent-native)
+
+You don't have to hand-edit any config. Tell your agent:
+
+> *"Install chatgpt-bridge."*
+
+It runs:
+
+```bash
+npx chatgpt-bridge install --for claude-code   # or codex, cursor, zed, cline, continue, claude-desktop, gemini-cli, openai-sdk, aider, all
+```
+
+The command is idempotent: detects the target's config file location, merges the `chatgpt-bridge` entry, and reports back as JSON. Add `--dry-run` to preview; `--uninstall` to revert. Use `--for all` to register with every IDE detected on disk in one shot.
+
+Targets covered: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `gemini-cli`, `aider` (snippet), `openai-sdk` (snippet), `all`.
+
+### What an agent should read first
+
+```bash
+chatgpt-bridge capabilities
+```
+
+Returns the entire surface as a single JSON document: every verb, args, returns, idempotency, side effects, typical latency, and structured error remedies. Agents read it once at session start and need nothing else.
+
 ### Use with Claude Desktop / Cursor / Zed (MCP)
 
-The bridge ships a [Model Context Protocol](https://modelcontextprotocol.io) server. Add it to your client config:
+After `chatgpt-bridge install --for <target>`, restart the IDE. Three MCP tools become available:
+
+- `generate_image(prompt, out?, size?, quality?)` — saves a PNG, returns the path.
+- `chat(prompt, system?, model?)` — assistant reply as plain text.
+- `health()` — bridge state snapshot.
+
+If you'd rather configure manually, the MCP entry is:
 
 ```json
 {
@@ -243,14 +273,6 @@ The bridge ships a [Model Context Protocol](https://modelcontextprotocol.io) ser
   }
 }
 ```
-
-Restart your MCP client. Three tools become available:
-
-- `generate_image(prompt, out?, size?, quality?)` — saves a PNG, returns the path.
-- `chat(prompt, system?, model?)` — assistant reply as plain text.
-- `health()` — bridge state snapshot.
-
-That's it. No HTTP, no port, no API key — Claude Desktop can now generate images using the user's ChatGPT subscription.
 
 Full integrations guide: [docs/integrations.md](./docs/integrations.md).
 
