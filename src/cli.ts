@@ -21,7 +21,7 @@ import { Command } from "commander";
 import { resolveAttachments } from "./attachments.ts";
 import { Auth, tokenExpiryMs } from "./auth.ts";
 import { CAPABILITIES } from "./capabilities.ts";
-import { type Config, loadConfig } from "./config.ts";
+import { type Config, DEFAULT_CHAT_MODEL, loadConfig } from "./config.ts";
 import { generateImage } from "./images.ts";
 import { type InstallResult, type Target, runInstall } from "./install.ts";
 import {
@@ -128,10 +128,9 @@ program
 						why: "Re-run after a brief wait; transient upstream errors are common.",
 					});
 				}
-				// Drain the body fully. Don't call body.cancel() on Windows +
-				// Node 24: the abort path triggers a libuv UV_HANDLE_CLOSING
-				// assertion that aborts the process with a non-zero exit code,
-				// even when the verb otherwise succeeded.
+				// Drain the body. Don't call body.cancel(): the abort path
+				// interacts with the libuv issue described at the bottom of
+				// this handler.
 				await res.text().catch(() => {});
 			} catch (e) {
 				checks.push({ name: "upstream", ok: false, detail: (e as Error).message });
@@ -152,17 +151,13 @@ program
 		};
 		if (remedy.length > 0) out.remedy = remedy;
 		writeJson(out);
-		// Don't call process.exit on the success path. On Windows + Node 24,
-		// the global fetch's keep-alive socket triggers a libuv
-		// UV_HANDLE_CLOSING assertion during synchronous teardown, aborting
-		// with a non-zero exit code despite the verb succeeding. Letting Node
-		// exit naturally lets the agent runtime close the socket cleanly.
-		// We still need a non-zero exit on failure: schedule it after Node
-		// has drained handles.
-		if (!allOk) {
-			setImmediate(() => process.exit(1));
-		}
-		// Exit code on success: 0 (default when event loop empties).
+		// Windows + Node 24 libuv quirk: calling process.exit(0) immediately
+		// after a fetch can trigger a UV_HANDLE_CLOSING assertion (because the
+		// global fetch's keep-alive socket is still being torn down) and
+		// abort the process with a non-zero exit code despite success. Let
+		// Node drain handles naturally on the success path; only schedule a
+		// deferred exit on failure.
+		if (!allOk) setImmediate(() => process.exit(1));
 	});
 
 /* ------------------------------- login ---------------------------------- */
@@ -276,7 +271,7 @@ async function runChatOnce(
 	input.push({ role: "user", content: userContent });
 
 	const body: Record<string, unknown> = {
-		model: job.model ?? "gpt-5.2",
+		model: job.model ?? DEFAULT_CHAT_MODEL,
 		input,
 		stream: true,
 		store: false,
@@ -302,7 +297,7 @@ async function runChatOnce(
 		}
 	}
 	if (stream) process.stdout.write("\n");
-	return { ok: true, text, latency_ms: Date.now() - t0, model: job.model ?? "gpt-5.2" };
+	return { ok: true, text, latency_ms: Date.now() - t0, model: job.model ?? DEFAULT_CHAT_MODEL };
 }
 
 program
@@ -315,7 +310,7 @@ program
 		[] as string[],
 	)
 	.option("--system <text|@file>", "system prompt; '@path' reads file")
-	.option("--model <id>", "model id", "gpt-5.2")
+	.option("--model <id>", "model id", DEFAULT_CHAT_MODEL)
 	.option("--stream", "stream tokens to stdout (default if tty)")
 	.option("--no-stream", "force non-streaming JSON output")
 	.option("--json", "force JSON output even if streaming would be possible")
@@ -409,14 +404,20 @@ program
 					(opts.stream === true || Boolean(process.stdout.isTTY));
 
 				if (jobs) {
+					// Resolve --system @file once, not per job. JSONL's per-line
+					// `system` field is taken verbatim (no @file expansion) so
+					// each line is self-contained and reproducible.
+					const cliSystem = opts.system ? await resolveAtFile(opts.system) : undefined;
 					let anyOk = false;
 					for (const j of jobs) {
 						const merged: ChatJob = {
 							prompt: j.prompt,
 							attach: j.attach ?? opts.attach,
-							...((j.system ?? opts.system)
-								? { system: j.system ?? (opts.system ? await resolveAtFile(opts.system) : "") }
-								: {}),
+							...(j.system !== undefined
+								? { system: j.system }
+								: cliSystem !== undefined
+									? { system: cliSystem }
+									: {}),
 							model: j.model ?? opts.model,
 						};
 						const r = await runChatOnce(cfg, upstream, merged, false);

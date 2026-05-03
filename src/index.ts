@@ -22,7 +22,13 @@ export {
 export type { AttachmentKind, AttachmentLimits, ResolvedAttachment } from "./attachments.ts";
 export { Auth, jwtClaims, tokenExpiryMs, accountIdFromIdToken } from "./auth.ts";
 export type { AuthFile, Tokens } from "./auth.ts";
-export { type Config, DEFAULTS, authFileCandidates, loadConfig } from "./config.ts";
+export {
+	type Config,
+	DEFAULT_CHAT_MODEL,
+	DEFAULTS,
+	authFileCandidates,
+	loadConfig,
+} from "./config.ts";
 export { generateImage, ImageRequest } from "./images.ts";
 export type { ImageResult } from "./images.ts";
 export { createApp, startServer, translateChatMessages, VERSION } from "./server.ts";

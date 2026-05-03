@@ -1,19 +1,25 @@
 /**
- * HTTP server. Six routes, all in this file. Total ~150 lines.
+ * HTTP server. Six routes, all defined inline by intent.
  *
  *   GET  /health                  — auth + rate snapshot
  *   GET  /v1/models               — list models (with synthetic image aliases)
  *   POST /v1/responses            — pass-through with body normalization
- *   POST /v1/chat/completions     — thin Chat→Responses translator
- *   POST /v1/images/generations   — generate image via image_generation tool
- *   ALL  /v1/*                    — passthrough for forward-compat
+ *   POST /v1/chat/completions     — Chat→Responses translator (multimodal-aware)
+ *   POST /v1/images/generations   — generate image via image_generation tool;
+ *                                   accepts `reference_images[]` (bridge ext)
+ *   ALL  /v1/*                    — pass-through for forward-compat
+ *
+ * Bridge extensions (non-portable to api.openai.com):
+ *   - `reference_images: AttachmentSpec[]` on /v1/images/generations
+ *   - `{type:"input_file", file:{path|url|data,mime,filename}}` content part
+ *     on /v1/chat/completions
  */
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AttachmentError, resolveAttachment } from "./attachments.ts";
 import { Auth, tokenExpiryMs } from "./auth.ts";
-import type { Config } from "./config.ts";
+import { type Config, DEFAULT_CHAT_MODEL } from "./config.ts";
 import { ImageRequest, generateImage } from "./images.ts";
 import type { UpstreamError } from "./upstream.ts";
 import { Upstream, normalizeResponsesBody, parseSSE } from "./upstream.ts";
@@ -257,7 +263,7 @@ export function createApp(cfg: Config) {
 		// caller wanted non-stream, we aggregate the SSE and return a single Chat
 		// completion object.
 		const upstreamBody: Record<string, unknown> = {
-			model: body.model ?? "gpt-5.2",
+			model: body.model ?? DEFAULT_CHAT_MODEL,
 			input: translatedInput,
 			stream: true,
 			store: false,
@@ -291,7 +297,7 @@ export function createApp(cfg: Config) {
 					id: `chatcmpl_${crypto.randomUUID()}`,
 					object: "chat.completion",
 					created: Math.floor(Date.now() / 1000),
-					model: body.model ?? "gpt-5.2",
+					model: body.model ?? DEFAULT_CHAT_MODEL,
 					choices: [
 						{
 							index: 0,
@@ -318,7 +324,7 @@ export function createApp(cfg: Config) {
 												id,
 												object: "chat.completion.chunk",
 												created: Math.floor(Date.now() / 1000),
-												model: body.model ?? "gpt-5.2",
+												model: body.model ?? DEFAULT_CHAT_MODEL,
 												choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
 											})}\n\n`,
 										),
@@ -332,7 +338,7 @@ export function createApp(cfg: Config) {
 											id,
 											object: "chat.completion.chunk",
 											created: Math.floor(Date.now() / 1000),
-											model: body.model ?? "gpt-5.2",
+											model: body.model ?? DEFAULT_CHAT_MODEL,
 											choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
 										})}\n\n`,
 									),

@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { AttachmentSpec, resolveAttachments } from "./attachments.ts";
+import { AttachmentError, AttachmentSpec, resolveAttachments } from "./attachments.ts";
 import type { Config } from "./config.ts";
 import { type Upstream, UpstreamError, parseSSE } from "./upstream.ts";
 
@@ -53,12 +53,21 @@ async function buildBody(cfg: Config, req: ImageRequest): Promise<Record<string,
 
 	const userContent: Array<Record<string, unknown>> = [];
 	if (hasRefs) {
-		const { parts } = await resolveAttachments(refs, {}, cfg);
+		const { resolved, parts } = await resolveAttachments(refs, {}, cfg);
+		// Refuse non-image attachments here. The schema accepts AttachmentSpec
+		// (which is wider — also matches text files), so we reject text/file
+		// attachments explicitly with a clear error rather than silently
+		// dropping them.
+		const nonImage = resolved.find((r) => r.kind !== "image");
+		if (nonImage) {
+			throw new AttachmentError(
+				`reference_images entry is not an image (mime=${nonImage.mime}, file=${nonImage.filename})`,
+				"ATTACH_BAD_SHAPE",
+			);
+		}
 		// Reference images first so the model "sees" them before reading the
 		// instruction. Empirically this produces stronger style transfer.
-		for (const p of parts) {
-			if (p.type === "input_image") userContent.push(p);
-		}
+		for (const p of parts) userContent.push(p);
 		userContent.push({ type: "input_text", text: `Generate an image: ${req.prompt}` });
 	}
 

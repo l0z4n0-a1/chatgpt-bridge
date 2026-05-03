@@ -8,6 +8,7 @@
  * a test (test/capabilities.test.ts) asserts every CLI verb appears here.
  */
 
+import { DEFAULT_CHAT_MODEL } from "./config.ts";
 import { VERSION } from "./server.ts";
 
 export interface CapabilityArg {
@@ -142,6 +143,13 @@ export const CAPABILITIES: Capabilities = {
 						why: "OAuth flow opens browser; user signs in to ChatGPT once",
 					},
 				},
+				{
+					code: "INSTALL_TARGET_UNPARSEABLE",
+					remedy: {
+						action:
+							"Inspect or remove the existing config file manually, then re-run install. The bridge refuses to overwrite a non-JSON file to avoid clobbering user data.",
+					},
+				},
 			],
 		},
 		{
@@ -167,10 +175,10 @@ export const CAPABILITIES: Capabilities = {
 				attach: {
 					type: "string[]",
 					repeatable: true,
-					doc: "Local paths or URLs. Auto-detects image/text. Max 25 MiB each.",
+					doc: "Local paths or URLs. MIME auto-detected by extension/magic bytes; image/* becomes vision input, everything else becomes input_file context. Max 25 MiB each, 100 MiB aggregate.",
 				},
 				system: { type: "string|@file", doc: "Optional system prompt." },
-				model: { type: "string", default: "gpt-5.2" },
+				model: { type: "string", default: DEFAULT_CHAT_MODEL },
 				stream: { type: "bool", default: "true if tty" },
 			},
 			returns: {
@@ -178,10 +186,9 @@ export const CAPABILITIES: Capabilities = {
 					ok: "bool",
 					text: "string",
 					model: "string",
-					usage: "object",
 					latency_ms: "number",
 				},
-				batch: "one JSON object per line",
+				batch: "one JSON object per line, exit 0 if any job succeeded",
 			},
 			side_effects: "Reads attached files. One upstream call per invocation (or per batch line).",
 			idempotent: false,
@@ -194,9 +201,21 @@ export const CAPABILITIES: Capabilities = {
 				{ cmd: "echo 'hello' | chatgpt-bridge chat -", purpose: "stdin prompt" },
 			],
 			errors: [
-				{ code: "AUTH_MISSING", remedy: { cmd: "chatgpt-bridge install --for openai-sdk" } },
-				{ code: "RATE_LIMITED", remedy: { wait_seconds: "varies" } },
+				{
+					code: "AUTH_MISSING",
+					remedy: {
+						cmd: "npx @openai/codex login",
+						interactive: true,
+						why: "OAuth flow opens browser; user signs in to ChatGPT once",
+					},
+				},
+				{ code: "RATE_LIMITED", remedy: { wait_seconds: "see Retry-After header" } },
 				{ code: "ATTACH_TOO_LARGE", remedy: { action: "split or compress attachment" } },
+				{
+					code: "ATTACH_FORBIDDEN",
+					remedy: { action: "use a path within cwd; never reference auth files" },
+				},
+				{ code: "ATTACH_NOT_FOUND", remedy: { action: "verify the path before retrying" } },
 			],
 		},
 		{
@@ -244,6 +263,28 @@ export const CAPABILITIES: Capabilities = {
 				},
 				{ cmd: "chatgpt-bridge image 'fox' --dry-run", purpose: "validate without spending quota" },
 			],
+			errors: [
+				{
+					code: "AUTH_MISSING",
+					remedy: {
+						cmd: "npx @openai/codex login",
+						interactive: true,
+						why: "OAuth flow opens browser; user signs in to ChatGPT once",
+					},
+				},
+				{ code: "RATE_LIMITED", remedy: { wait_seconds: "see Retry-After header" } },
+				{
+					code: "ATTACH_BAD_SHAPE",
+					remedy: {
+						action: "reference_images entries must be image MIME types (png/jpeg/webp/gif)",
+					},
+				},
+				{
+					code: "ATTACH_TOO_LARGE",
+					remedy: { action: "compress or downscale the reference image" },
+				},
+				{ code: "ATTACH_FORBIDDEN", remedy: { action: "use a reference path within cwd" } },
+			],
 		},
 		{
 			name: "models",
@@ -277,10 +318,11 @@ export const CAPABILITIES: Capabilities = {
 				port: { type: "number", default: 10531 },
 				host: { type: "string", default: "127.0.0.1" },
 			},
-			returns: { listening: "string", endpoints: "string[]" },
+			returns: "long-running foreground process; logs to stderr; no JSON return value",
 			side_effects: "Binds to host:port. Foreground process. Shut down with SIGINT/SIGTERM.",
 			idempotent: false,
-			rate_limited: true,
+			// `serve` itself is the launcher; the per-route rate limit lives inside.
+			rate_limited: false,
 			examples: [{ cmd: "chatgpt-bridge serve" }, { cmd: "chatgpt-bridge serve --port 11000" }],
 		},
 		{
@@ -289,9 +331,10 @@ export const CAPABILITIES: Capabilities = {
 			args: {},
 			returns: "speaks MCP on stdin/stdout",
 			side_effects:
-				"Stdin/stdout reserved for MCP protocol. Errors go to stderr. Auto-registered when you run `install --for <ide>`.",
+				"Stdin/stdout reserved for MCP protocol; errors go to stderr. Use `install --for <ide>` to register the launch command in the IDE's config; the IDE then spawns this process.",
 			idempotent: false,
-			rate_limited: true,
+			// `mcp` itself launches the server; the `image` and `chat` tools inside are rate-limited.
+			rate_limited: false,
 			examples: [{ cmd: "chatgpt-bridge mcp" }],
 		},
 	],

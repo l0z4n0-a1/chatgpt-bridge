@@ -101,7 +101,7 @@ Add `--dry-run` to preview, `--uninstall` to remove. All operations are idempote
 - Repo: https://github.com/l0z4n0-a1/chatgpt-bridge
 - npm: https://www.npmjs.com/package/chatgpt-bridge
 - License: MIT
-- ~900 LOC across 8 source files. Read top-to-bottom in 30 minutes.
+- ~1.7k LOC across 11 source files. Read top-to-bottom in under an hour.
 
 ## What you should NOT do as an agent
 

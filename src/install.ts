@@ -97,7 +97,8 @@ async function readJson<T>(p: string): Promise<JsonReadResult<T>> {
 	}
 }
 
-async function writeJson(p: string, data: unknown, dryRun: boolean): Promise<void> {
+/** Pretty-print JSON to disk, atomically respecting --dry-run. */
+async function writeJsonFile(p: string, data: unknown, dryRun: boolean): Promise<void> {
 	if (dryRun) return;
 	await fs.mkdir(path.dirname(p), { recursive: true });
 	await fs.writeFile(p, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
@@ -150,13 +151,13 @@ async function applyMcpJson(
 	if (options.uninstall) {
 		if (!present) return { already: false };
 		delete servers[MCP_ENTRY_NAME];
-		await writeJson(configPath, { ...current, mcpServers: servers }, options.dryRun ?? false);
+		await writeJsonFile(configPath, { ...current, mcpServers: servers }, options.dryRun ?? false);
 		return { already: false };
 	}
 
 	if (present) return { already: true };
 	servers[MCP_ENTRY_NAME] = MCP_COMMAND;
-	await writeJson(configPath, { ...current, mcpServers: servers }, options.dryRun ?? false);
+	await writeJsonFile(configPath, { ...current, mcpServers: servers }, options.dryRun ?? false);
 	return { already: false };
 }
 
@@ -358,6 +359,8 @@ async function installSingle(
 	}
 
 	const configPath = (() => {
+		// Exhaustive: aider/openai-sdk/codex/all are handled before this point;
+		// the `never` assertion catches any new Target that forgets a path.
 		switch (target) {
 			case "claude-code":
 				return pathClaudeCode();
@@ -373,6 +376,10 @@ async function installSingle(
 				return pathContinue();
 			case "gemini-cli":
 				return pathGeminiCli();
+			default: {
+				const _exhaustive: never = target;
+				throw new Error(`Unhandled install target: ${String(_exhaustive)}`);
+			}
 		}
 	})();
 

@@ -12,10 +12,17 @@
  *     }
  *   }
  *
- * Tools exposed:
- *   - generate_image  : prompt → base64 PNG (saved to file, returns path)
- *   - chat            : messages → assistant text
- *   - health          : bridge state snapshot
+ * `chatgpt-bridge install --for <ide>` writes that block automatically.
+ *
+ * Tools exposed (mirror the CLI surface):
+ *   - generate_image(prompt, out?, size?, quality?, references?)
+ *       → writes PNG to disk, returns absolute path. `references` are
+ *         optional reference images that drive style/composition.
+ *   - chat(prompt, system?, model?, attachments?)
+ *       → assistant reply as plain text. `attachments` accept paths or URLs;
+ *         images become vision input, text files become contextual file_data.
+ *   - health()
+ *       → bridge state snapshot (auth, version, upstream).
  */
 
 import { promises as fs } from "node:fs";
@@ -26,7 +33,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { resolveAttachments } from "./attachments.ts";
 import { Auth, tokenExpiryMs } from "./auth.ts";
-import type { Config } from "./config.ts";
+import { type Config, DEFAULT_CHAT_MODEL } from "./config.ts";
 import { generateImage } from "./images.ts";
 import { VERSION } from "./server.ts";
 import { Upstream } from "./upstream.ts";
@@ -174,7 +181,7 @@ async function handleChat(
 		path: "/responses",
 		method: "POST",
 		body: {
-			model: args.model ?? "gpt-5.2",
+			model: args.model ?? DEFAULT_CHAT_MODEL,
 			input,
 			stream: true,
 			store: false,
@@ -218,7 +225,11 @@ async function handleHealth(
 			ok: false,
 			version: VERSION,
 			error: (e as Error).message,
-			remedy: "Run `npx @openai/codex login` once to authenticate.",
+			remedy: {
+				cmd: "npx @openai/codex login",
+				interactive: true,
+				why: "OAuth flow opens browser; user signs in to ChatGPT once",
+			},
 		};
 	}
 	return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };

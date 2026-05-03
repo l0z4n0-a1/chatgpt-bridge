@@ -8,6 +8,13 @@
 import os from "node:os";
 import path from "node:path";
 
+/**
+ * Default chat model. Single source of truth — used by /v1/chat/completions,
+ * the CLI `chat` verb, the MCP `chat` tool, and the capability catalog.
+ * Bump in one place, not nine.
+ */
+export const DEFAULT_CHAT_MODEL = "gpt-5.2";
+
 export const DEFAULTS = {
 	host: "127.0.0.1",
 	port: 10531,
@@ -20,6 +27,7 @@ export const DEFAULTS = {
 	timeoutMs: 400_000,
 	rateHourlyHard: 200,
 	imageModel: "gpt-5.4-mini",
+	chatModel: DEFAULT_CHAT_MODEL,
 } as const;
 
 export interface Config {

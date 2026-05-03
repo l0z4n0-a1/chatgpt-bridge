@@ -84,4 +84,24 @@ describe("capabilities catalog", () => {
 		expect(blob).toContain("reference_images");
 		expect(blob).toContain("input_file");
 	});
+
+	test("install errors document INSTALL_TARGET_UNPARSEABLE", () => {
+		const install = CAPABILITIES.verbs.find((v) => v.name === "install");
+		const codes = install?.errors?.map((e) => e.code) ?? [];
+		expect(codes).toContain("AUTH_MISSING");
+		expect(codes).toContain("INSTALL_TARGET_UNPARSEABLE");
+	});
+
+	test("image errors document attachment failure modes", () => {
+		const image = CAPABILITIES.verbs.find((v) => v.name === "image");
+		const codes = image?.errors?.map((e) => e.code) ?? [];
+		expect(codes).toContain("AUTH_MISSING");
+		expect(codes).toContain("ATTACH_BAD_SHAPE");
+	});
+
+	test("chat AUTH_MISSING remedy points to codex login (not install)", () => {
+		const chat = CAPABILITIES.verbs.find((v) => v.name === "chat");
+		const auth = chat?.errors?.find((e) => e.code === "AUTH_MISSING");
+		expect((auth?.remedy as { cmd?: string }).cmd).toBe("npx @openai/codex login");
+	});
 });

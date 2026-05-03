@@ -4,7 +4,7 @@
 
 ## What this repo is
 
-A small TypeScript package (~900 LOC) that exposes a localhost OpenAI-compatible HTTP proxy. It reads OAuth tokens from `~/.codex/auth.json` and forwards requests to `chatgpt.com/backend-api/codex/responses`. See [docs/architecture.md](./docs/architecture.md) for the deep-dive.
+A small TypeScript package (~1.7k LOC of source) that exposes a localhost OpenAI-compatible HTTP proxy plus a CLI of agent-native verbs (`install`, `capabilities`, `chat`, `image`, `models`, `serve`, `mcp`, `doctor`). It reads OAuth tokens from `~/.codex/auth.json` and forwards requests to `chatgpt.com/backend-api/codex/responses`. See [docs/architecture.md](./docs/architecture.md) for the deep-dive.
 
 ## Project layout
 

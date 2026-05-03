@@ -58,13 +58,21 @@ Total ≈ 5 packages installed.
 Optimization for ergonomics, not raw speed:
 - The OpenAI SDK ecosystem is TS-first.
 - Bun + TS lets you ship a single self-executing binary if you want.
-- The whole codebase is ~900 LOC; raw speed isn't where time is spent (network is).
+- The whole codebase is ~1.7k LOC; raw speed isn't where time is spent (network is).
 
 Python equivalents exist but require pip + venv + interpreter, which is friction. `npx chatgpt-bridge serve` runs everywhere Node runs, no setup.
 
 ### Can I use this with image editing? Vision? Embeddings?
 
-Right now the bridge implements `/v1/images/generations` (with `image_generation` tool). Other endpoints work via passthrough at `/v1/*` — including `/v1/responses` directly, which supports vision input. Image **edits** (`/v1/images/edits`) is planned for `0.2.0`.
+**Vision** works first-class at `/v1/chat/completions` since v0.3.0: any OpenAI-shape `image_url` content part is translated to Responses `input_image` (URLs pass through; data-URLs forward as-is). Use `chatgpt-bridge chat "..." --attach image.png` from the CLI, the `attachments[]` arg in MCP, or any OpenAI SDK that speaks the vision shape.
+
+**File context** (.md, .txt, .json, etc.) works via the bridge-extension `{type:"input_file", file:{path|url|data,mime,filename}}` content part, also at `/v1/chat/completions`. Same `--attach` flag in CLI; same `attachments[]` arg in MCP.
+
+**Reference images for generation** (style/composition transfer) work at `/v1/images/generations` via the bridge-extension `reference_images[]` field, or via CLI `--ref` / MCP `references[]`. Up to 8 refs per request.
+
+**Image edits** (`/v1/images/edits` — masked inpainting) are not yet implemented; use the upstream `/v1/responses` directly if you need masks today.
+
+**Embeddings** are not exposed by the upstream Codex endpoint. Use OpenAI's paid Embeddings API.
 
 ### Can I use this in n8n / Make / Zapier?
 
