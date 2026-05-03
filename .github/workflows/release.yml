@@ -28,6 +28,8 @@ jobs:
 
   binaries:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
