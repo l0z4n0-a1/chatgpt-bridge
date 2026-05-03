@@ -2,69 +2,71 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] — 2026-05-03
 
-### Polish (post-QA pass)
+The agent-native release. Two-line setup, three killer capabilities, one machine-readable catalog. Everything from 0.2.0 keeps working.
 
-- **Empty-prompt guard** on `chat` and `image` — refuses empty prompts (from missing arg, empty stdin, or empty `prompt` field in a JSONL batch line) before reaching the upstream. Emits structured `remedy` with the correct usage example. Prevents quota waste on accidental empty calls.
-- **`install` refuses to overwrite garbage** — detects when the target config file exists but is not valid JSON (e.g. the corrupted/null-byte `~/.cursor/mcp.json` files some users have inherited from prior tools) and returns `{ok:false, error, remedy:{action,path}}`. The original file is preserved untouched. Empty/whitespace-only files are still safe to overwrite.
-- **`doctor` exit code on Windows + Node 24** — works around a libuv `UV_HANDLE_CLOSING` assertion that fired during synchronous teardown after the global fetch's keep-alive socket. The fix lets Node drain handles before exiting on the success path; failure path still uses `setImmediate(() => process.exit(1))`. Bun was already unaffected.
-- **`pathCline` cross-platform** — collapsed three near-identical platform branches into one call to `appDataDir("Code")` (which resolves correctly on darwin/linux/win32). Same behavior, half the code.
-- **`gen` deprecation message** trimmed from `"warn: 'gen' is deprecated; use 'image'. Forwarding..."` to `"warn: 'gen' is deprecated, use 'image'."`.
-- **`capabilities.wire.stderr` description** sharpened from `"json-on-error"` to `"json-on-arg-validation-or-fatal-error"` and a clarifying note added: verb-completion results (including `ok:false` from upstream/attachment errors) go to **stdout**; argument-validation and fatal errors go to **stderr**. Agents now have an unambiguous parsing rule.
+### Headlines
 
-### Version
+- **One-shot install for 10 IDEs / agent runtimes.** `chatgpt-bridge install --for <target>` writes the right MCP/config block to the right path on the right OS. Idempotent, supports `--dry-run` and `--uninstall`. Refuses to overwrite a non-JSON config file.
+  Targets: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `gemini-cli`, `aider` (snippet), `openai-sdk` (snippet), `all` (auto-detects what's installed).
+- **Multimodal input.** Vision (`image_url` content parts) and file context (`{type:"input_file", file:{path|url|data,mime}}` — bridge extension) work first-class on `/v1/chat/completions`. Reference images (`reference_images[]` — bridge extension) drive style/composition on `/v1/images/generations`. 25 MiB per attachment, 100 MiB aggregate. Path-traversal guard blocks attempts to read `~/.codex/auth.json`.
+- **Machine-readable catalog.** `chatgpt-bridge capabilities` returns one JSON document describing every verb, arg, return shape, idempotency, side effects, typical latency, and error-code → structured `remedy` mapping. Agents read once, know everything.
 
-- **Bumped to 0.3.0.** This release adds 5 new verbs (`install`, `capabilities`, `chat`, `image`, `models`), the multimodal surface, and the agent-native conventions. Backward-compatible: all 0.2.0 endpoints, MCP tools, and the `gen` CLI verb continue to work.
+### Added — CLI verbs
 
-### Added — MCP mirror
+- `chatgpt-bridge chat <prompt|@file|->` — text or multimodal message. `--attach <path|url>` repeatable; auto-detects image vs. text. `--system <text|@file>`. Streams to tty; JSON to pipe.
+- `chatgpt-bridge image <prompt|@file|->` — generate one PNG. `--ref <path|url>` repeatable (max 8) for style transfer. JSON output with absolute path, byte count, latency, and `revised_prompt` from the model.
+- `chatgpt-bridge models` — list available chat + image models (deduped, sorted, includes synthetic image aliases).
+- `chatgpt-bridge install --for <target>` and `chatgpt-bridge capabilities` — see Headlines.
+- **Stdin JSONL batch** for `chat` and `image` — pipe one job per line, get one result line per job. Exit 0 if any job succeeds, 1 if none.
+- **`@file` syntax** in any string flag — `--system @persona.md`, prompt arg as `@brief.md`, etc.
+- **Universal `--dry-run`** on `chat`, `image`, `install` — validates inputs, never calls upstream or writes files.
+- **Documented exit codes** — `0` ok, `1` user error, `2` auth, `3` upstream, `4` rate-limited, `5` quota exhausted.
 
-- **MCP `chat` tool** — gains `attachments?: string[]` argument. Local paths or URLs auto-detect image vs. text and become vision input or contextual `input_file` parts. Same 25 MiB / 100 MiB caps as the HTTP and CLI surfaces.
-- **MCP `generate_image` tool** — gains `references?: string[]` argument. Up to 8 reference images shape style/composition. Identical wire to CLI `--ref` and HTTP `reference_images[]`.
-- Tool descriptions updated to surface the new capabilities so MCP-aware agents (Claude Desktop, Cursor, Zed, Cline, Continue) see them at tool-discovery time.
+### Added — HTTP
 
-### Added — CLI verbs (chat, image, models)
+- `/v1/chat/completions` now translates OpenAI vision parts (`image_url`) → Responses `input_image`, and the bridge-extension `input_file` part (with `file:{path|url|data,mime,filename}`) → resolved Responses `input_file`. Unknown part types pass through verbatim (forward-compat).
+- `/v1/images/generations` accepts an optional `reference_images: AttachmentSpec[]` field (max 8). When refs are present, `tool_choice` flips from `required` to `auto` so the model can inspect references before invoking the image-generation tool.
+- `/health`, `/v1/responses`, `/v1/models`, `/v1/*` catch-all unchanged.
 
-- **`chatgpt-bridge chat <prompt|@file|->`** — send a text or multimodal message; print reply (streamed to tty by default, JSON when piped). `--attach <path|url>` (repeatable) for files/images. `--system <text|@file>` reads system prompt from string or file. `--model`, `--stream`/`--no-stream`, `--json`, `--dry-run`. Stdin `-` accepts a single prompt or JSONL batch (one job per line).
-- **`chatgpt-bridge image <prompt|@file|->`** — replaces `gen` (which is kept as a deprecated alias that warns and forwards). New `--ref <path|url>` (repeatable, max 8) for reference images. Same JSONL batch via stdin. Always emits JSON `{ok, file, bytes, latency_ms, revised_prompt}`.
-- **`chatgpt-bridge models`** — list available models (sorted, deduped, includes synthetic image aliases). Returns `{models: string[]}`.
-- **`@file` syntax** — any string flag accepting `--system @path.md`, `--prompt @brief.md`, etc., reads the file contents in place of the literal string.
-- **Stdin JSONL batch** — `chat -` and `image -` accept JSONL on stdin: one job object per line (e.g. `{"prompt":"a","ref":["mood.png"],"out":"a.png"}`). Each result is a JSON line on stdout. Exit code 0 if any job succeeded, 1 if none.
-- **Global `--dry-run`** on `chat`, `image`, `install` — validates inputs and prints what would be sent without calling upstream or writing files.
-- **Documented exit codes**: 0 ok, 1 user-error, 2 auth, 3 upstream, 4 rate-limited.
+### Added — MCP
+
+- `chat` tool gains `attachments?: string[]`. `generate_image` tool gains `references?: string[]`. Same caps and semantics as the HTTP and CLI surfaces. Existing 3 tools, no new ones.
+
+### Added — library
+
+```ts
+import {
+  CAPABILITIES, CAPABILITY_VERB_NAMES,
+  runInstall, type InstallTarget, type InstallResult,
+  resolveAttachment, resolveAttachments, toContentPart, AttachmentError,
+  type AttachmentKind, type ResolvedAttachment,
+  translateChatMessages,
+  DEFAULT_CHAT_MODEL,
+} from "chatgpt-bridge";
+```
+
+### Changed
+
+- `gen` is now a deprecated alias for `image` (warns to stderr, then forwards). Will be removed in 0.5.
+- `doctor` returns a `remedy[]` array when any check fails (`{check, cmd, interactive?, why?}`). Agents can read it and act without involving the user.
+- `gpt-5.2` is no longer hardcoded across nine source locations — `DEFAULT_CHAT_MODEL` in `config.ts` is the single source of truth (also exported).
+
+### Fixed
+
+- **Empty-prompt guard** on `chat` and `image`. An empty prompt (missing arg, empty stdin, or empty `prompt` field in a JSONL line) now exits with code 1 and a structured `remedy`. Previously the bridge sent a placeholder request to the upstream and wasted quota.
+- **`install` refuses to overwrite garbage.** When the target config file exists but isn't valid JSON (e.g. corrupted/null-byte `~/.cursor/mcp.json` files inherited from prior tools), `install` returns `{ok:false, error, remedy:{action,path}}` and leaves the file untouched. Empty/whitespace-only files are still safe to overwrite.
+- **`doctor` exit code on Windows + Node 24.** Worked around a libuv `UV_HANDLE_CLOSING` assertion that fired during synchronous teardown after the global fetch's keep-alive socket. Bun was already unaffected.
+- **MCP `health` `remedy` field** is now a structured `{cmd, interactive, why}` object, matching every other surface (was a plain string).
 
 ### Internal
 
-- New module `src/io.ts` (~110 LOC) — single-responsibility I/O helpers: `resolveAtFile`, `parseStdin`, `readStdin`, `writeJson`, `writeError`, `classifyExitCode`, `isTty`. Keeps `cli.ts` focused on Commander wiring.
-- 10 new tests in `test/io.test.ts` covering `@file` resolution and JSONL detection (plain text vs. JSONL, blank-line tolerance, malformed-line line-number reporting).
-
-### Added — multimodal input
-
-- **Vision input** in `/v1/chat/completions` — OpenAI vision shape (`{type:"image_url", image_url:{url}}` or string URL/data-URL) is translated to Responses `input_image` content parts. URLs pass through to upstream; the bridge does not fetch them.
-- **File-as-context** in `/v1/chat/completions` — bridge extension content part `{type:"input_file", file:{path|url|data,mime,filename}}`. Local paths are read, base64-encoded, sent as `input_file`. Path-traversal guard blocks attempts to read `~/.codex/auth.json` or any auth-file candidate directory. 25 MiB per attachment, 100 MiB aggregate cap.
-- **Reference images** in `/v1/images/generations` — new optional `reference_images[]` field accepts paths, URLs, data-URLs, or `{path|url|data}` objects (max 8). Drives style/composition. When present, `tool_choice` flips from `required` to `auto` so the model can inspect references before generating.
-- **`AttachmentSpec`, `resolveAttachment`, `resolveAttachments`, `toContentPart`, `AttachmentError`** exported from the library entry point.
-- **`translateChatMessages`** exported for direct use by integrations that build their own Responses-API bodies.
-
-### Internal
-
-- New module `src/attachments.ts` (~290 LOC) — single-responsibility resolver. Handles MIME detection (extension + magic bytes), path safety (allowedRoot + forbiddenPaths derived from `authFileCandidates`), size caps, and produces ready-to-splice content parts.
-- `src/server.ts` chat translator (`translateChatMessages`) — maps OpenAI Chat parts to Responses parts, resolves bridge-extension `input_file` parts inline. Forward-compatible: unknown part types pass through verbatim.
-- `src/images.ts` — `ImageRequest` schema gains `reference_images?: AttachmentSpec[]` (max 8). `buildBody` is now async; injects `input_image` parts into the user turn when refs are provided.
-- 35 new tests across `attachments.test.ts` and `server.test.ts`: schema shapes, MIME detection, path traversal, size caps, vision translation, file-as-context, URL pass-through, schema cap of 8 refs.
-
-### Added — agent-native core
-
-- **`chatgpt-bridge install --for <target>`** — one-shot, idempotent registration with 10 IDE/agent runtimes: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `aider`, `gemini-cli`, `openai-sdk`, plus `all` (auto-detects installed runtimes, skips absent ones). Supports `--dry-run` and `--uninstall`. Agents never have to hand-edit MCP/config files again.
-- **`chatgpt-bridge capabilities`** — machine-readable capability catalog. Returns a single JSON document describing every verb, args, returns, idempotency, side effects, typical latency, errors with structured `remedy`. Agents read once, know everything.
-- **`doctor` remedies** — when checks fail, output now includes a `remedy[]` array with executable next steps (`{check, cmd, interactive?, why?}`). Replaces the need for separate `auth`/`login` verbs in agent flows.
-- **Library exports** — `runInstall`, `CAPABILITIES`, `CAPABILITY_VERB_NAMES`, plus `InstallTarget`, `InstallResult`, `InstallOptions` types.
-
-### Internal
-
-- New module `src/capabilities.ts` (~280 LOC) — single source of truth for the agent-facing surface. A test (`test/capabilities.test.ts`) asserts catalog ↔ implementation parity.
-- New module `src/install.ts` (~290 LOC) — 10 adaptor implementations behind a uniform `runInstall(target, options)` entry point. Cross-platform path resolution (mac / linux / windows) for every target's config file.
-- 15 new tests covering install round-trips (write → re-install idempotent → uninstall preserves other keys), `--dry-run`, `--for all` skip behavior on bare environments, and full catalog coverage.
+- New modules: `src/install.ts` (10 adaptors), `src/capabilities.ts` (catalog), `src/attachments.ts` (resolver), `src/io.ts` (CLI I/O helpers).
+- Code grew from ~900 LOC across 7 source files to ~1.7k LOC across 11. Reads end-to-end in under an hour.
+- Test count: 17 → 90. Coverage spans schema validation, path safety, MIME detection, install round-trips, dry-run, JSONL parsing, error-catalog parity, compiled-CLI smoke.
+- `Target` switch in `installSingle` is exhaustive — TypeScript's `never` assertion catches new-target omissions at compile time.
+- Zero new runtime dependencies (re-uses `zod`).
 
 ## [0.2.0] — 2026-05-03
 
@@ -106,6 +108,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Library API: `generateImage`, `Auth`, `Upstream`, `createApp`, `loadConfig`.
 - Examples: Python, Node, curl, n8n, Claude Code skill.
 
+[0.3.0]: https://github.com/l0z4n0-a1/chatgpt-bridge/releases/tag/v0.3.0
 [0.2.0]: https://github.com/l0z4n0-a1/chatgpt-bridge/releases/tag/v0.2.0
 [0.1.1]: https://github.com/l0z4n0-a1/chatgpt-bridge/releases/tag/v0.1.1
 [0.1.0]: https://github.com/l0z4n0-a1/chatgpt-bridge/releases/tag/v0.1.0
