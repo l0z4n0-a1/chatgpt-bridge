@@ -1,6 +1,6 @@
 {
 	"name": "chatgpt-bridge",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Localhost OpenAI-compatible HTTP proxy that uses your ChatGPT subscription via OAuth — including image generation (gpt-image-2).",
 	"keywords": [
 		"chatgpt",
@@ -50,6 +50,7 @@
 	},
 	"dependencies": {
 		"@hono/node-server": "^1.13.0",
+		"@modelcontextprotocol/sdk": "^1.29.0",
 		"commander": "^12.1.0",
 		"hono": "^4.6.0",
 		"zod": "^3.25.76"

@@ -2,7 +2,7 @@
 /**
  * chatgpt-bridge CLI.
  *
- * Five commands: serve, gen, doctor, version, login.
+ * Six commands: serve, gen, mcp, doctor, login, version.
  * Login simply runs `npx @openai/codex login` for the user — the official
  * OAuth flow that mints auth.json. We don't reimplement it.
  */
@@ -74,6 +74,17 @@ program
 				2,
 			)}\n`,
 		);
+	});
+
+program
+	.command("mcp")
+	.description(
+		"Run as a Model Context Protocol server over stdio (for Claude Desktop, Cursor, Zed, Cline, etc.)",
+	)
+	.action(async () => {
+		const cfg = loadConfig();
+		const { startMcpServer } = await import("./mcp.ts");
+		await startMcpServer(cfg);
 	});
 
 program
@@ -162,7 +173,20 @@ program
 
 // Public createApp export-friendly: enable `chatgpt-bridge fetch` for tests.
 program.parseAsync(process.argv).catch((e) => {
-	console.error((e as Error).message ?? e);
+	const err = e as Error;
+	// Structured error to stderr — agents can parse this. Humans see the message.
+	process.stderr.write(
+		`${JSON.stringify({
+			ok: false,
+			error: err.message ?? String(e),
+			remedy:
+				err.message?.includes("auth.json") || err.message?.includes("access_token")
+					? "Run: npx @openai/codex login"
+					: err.message?.includes("ENEEDAUTH")
+						? "Run: chatgpt-bridge login"
+						: "Run: chatgpt-bridge doctor  (for diagnosis)",
+		})}\n`,
+	);
 	process.exit(1);
 });
 

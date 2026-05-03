@@ -189,6 +189,7 @@ const img = await generateImage(cfg, upstream, {
 ```
 chatgpt-bridge serve              Start the local proxy server
 chatgpt-bridge gen <prompt>       Generate one image to a file (one-shot)
+chatgpt-bridge mcp                Run as an MCP server (Claude Desktop / Cursor / Zed)
 chatgpt-bridge doctor             Health checks; exit 0 if healthy
 chatgpt-bridge login              Run `npx @openai/codex login`
 chatgpt-bridge version            Print version + runtime info
@@ -225,7 +226,31 @@ Working snippets for the most common tools:
 | **n8n** | [examples/n8n.json](./examples/n8n.json) |
 | **ComfyUI** | [docs/integrations.md#comfyui](./docs/integrations.md#comfyui) |
 | **Claude Code Skill** | [examples/claude-code-skill/](./examples/claude-code-skill/) |
+| **Claude Desktop / Cursor / Zed (MCP)** | [#use-with-claude-desktop-cursor-zed-mcp](#use-with-claude-desktop-cursor-zed-mcp) |
 | **curl + jq** | [examples/curl.sh](./examples/curl.sh) |
+
+### Use with Claude Desktop / Cursor / Zed (MCP)
+
+The bridge ships a [Model Context Protocol](https://modelcontextprotocol.io) server. Add it to your client config:
+
+```json
+{
+  "mcpServers": {
+    "chatgpt-bridge": {
+      "command": "npx",
+      "args": ["-y", "chatgpt-bridge", "mcp"]
+    }
+  }
+}
+```
+
+Restart your MCP client. Three tools become available:
+
+- `generate_image(prompt, out?, size?, quality?)` — saves a PNG, returns the path.
+- `chat(prompt, system?, model?)` — assistant reply as plain text.
+- `health()` — bridge state snapshot.
+
+That's it. No HTTP, no port, no API key — Claude Desktop can now generate images using the user's ChatGPT subscription.
 
 Full integrations guide: [docs/integrations.md](./docs/integrations.md).
 

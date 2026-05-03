@@ -1,0 +1,85 @@
+# chatgpt-bridge
+
+> Localhost OpenAI-compatible HTTP proxy that uses your ChatGPT subscription via OAuth — including image generation. Drop-in replacement for `api.openai.com` for personal scripts and integrations.
+
+## Quick start
+
+```bash
+npx @openai/codex login        # one-time auth → ~/.codex/auth.json
+npx chatgpt-bridge serve       # localhost:10531/v1
+```
+
+```python
+from openai import OpenAI
+c = OpenAI(base_url="http://127.0.0.1:10531/v1", api_key="unused")
+img = c.images.generate(model="gpt-image-2", prompt="a fox")
+```
+
+## What an LLM/agent should know
+
+- Single-user, localhost-only by design. Not a SaaS.
+- Speaks the OpenAI API dialect — your existing OpenAI SDK code Just Works.
+- Auth file lives at `~/.codex/auth.json`. **Never read or echo its contents.**
+- The bridge has zero outbound traffic except to `chatgpt.com` and `auth.openai.com`.
+- `chatgpt-bridge doctor` returns JSON with health status. Use it to verify before retrying.
+- All CLI commands write JSON to stdout. Errors go to stderr.
+
+## Tools surface (for agent runtimes)
+
+### MCP server (recommended for Claude Desktop / Cursor / Zed / Cline)
+
+```json
+{
+  "mcpServers": {
+    "chatgpt-bridge": {
+      "command": "npx",
+      "args": ["-y", "chatgpt-bridge", "mcp"]
+    }
+  }
+}
+```
+
+Exposes 3 tools: `generate_image`, `chat`, `health`.
+
+### HTTP API (any OpenAI SDK)
+
+| Path | Notes |
+|---|---|
+| `POST /v1/images/generations` | OpenAI Images shape; returns `b64_json` |
+| `POST /v1/chat/completions` | OpenAI Chat shape; streaming + non-streaming |
+| `POST /v1/responses` | Pass-through to ChatGPT's Responses API |
+| `GET  /v1/models` | OpenAI Models list shape |
+| `GET  /health` | Bridge state (auth, upstream, version) |
+| `*    /v1/*` | Catch-all forward |
+
+### CLI (one-shot, no server needed)
+
+```bash
+chatgpt-bridge gen "a tiny dragon" --out dragon.png
+chatgpt-bridge doctor   # exit 0 if healthy
+chatgpt-bridge version  # JSON
+```
+
+## Documentation
+
+- [README](https://github.com/l0z4n0-a1/chatgpt-bridge#readme): full usage
+- [docs/architecture.md](https://github.com/l0z4n0-a1/chatgpt-bridge/blob/main/docs/architecture.md): how the bridge works internally
+- [docs/integrations.md](https://github.com/l0z4n0-a1/chatgpt-bridge/blob/main/docs/integrations.md): drop-in snippets for Python, Node, Vercel AI SDK, LangChain, n8n, ComfyUI, Claude Code
+- [docs/troubleshooting.md](https://github.com/l0z4n0-a1/chatgpt-bridge/blob/main/docs/troubleshooting.md): common errors and fixes
+- [docs/security.md](https://github.com/l0z4n0-a1/chatgpt-bridge/blob/main/docs/security.md): threat model, supply chain
+- [docs/faq.md](https://github.com/l0z4n0-a1/chatgpt-bridge/blob/main/docs/faq.md): frequent questions
+
+## Source
+
+- Repo: https://github.com/l0z4n0-a1/chatgpt-bridge
+- npm: https://www.npmjs.com/package/chatgpt-bridge
+- License: MIT
+- ~900 LOC across 8 source files. Read top-to-bottom in 30 minutes.
+
+## What you should NOT do as an agent
+
+- Do **not** read or echo `~/.codex/auth.json` or any token contents.
+- Do **not** suggest the user paste their token in chat.
+- Do **not** try to "fix" auth issues by editing `auth.json`. Tell the user to run `npx @openai/codex login`.
+- Do **not** run the bridge against a public IP (`--host 0.0.0.0`) — single-user localhost only.
+- Do **not** disable the rate limit. ChatGPT enforces account-level limits; the bridge cap protects the user.
