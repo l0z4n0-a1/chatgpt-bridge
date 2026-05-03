@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest a new capability or enhancement.
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The codebase is intentionally small (~900 LOC). Features are accepted only if they:
+        - Solve a real problem someone has today.
+        - Don't materially increase bundle size or dependency count.
+        - Don't introduce telemetry or "phone home" behavior.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      placeholder: When I do X, I'd like to be able to Y, but currently …
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would the feature work? CLI flag, env var, new endpoint, library export?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other ways could this be solved? Why is yours best?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - "CLI (new command or flag)"
+        - "HTTP API (new endpoint)"
+        - "Library (new export)"
+        - "Documentation"
+        - "Tooling / CI"
+        - "Other"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-submit checklist
+      options:
+        - label: I read the [Architecture](../docs/architecture.md) doc to understand current design.
+          required: true
+        - label: I searched existing issues for similar requests.
+          required: true

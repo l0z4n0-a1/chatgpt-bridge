@@ -1,14 +1,15 @@
 # chatgpt-bridge
 
-> Localhost OpenAI-compatible HTTP proxy that uses your **ChatGPT subscription** (via OAuth) instead of an API key. Including **image generation** through `gpt-image-2`.
+> A localhost OpenAI-compatible HTTP proxy that uses your **ChatGPT subscription** (via OAuth) instead of a paid API key — including **image generation** with `gpt-image-2`.
 
-[![npm](https://img.shields.io/npm/v/chatgpt-bridge.svg)](https://www.npmjs.com/package/chatgpt-bridge)
-[![license](https://img.shields.io/npm/l/chatgpt-bridge.svg)](./LICENSE)
-[![ci](https://img.shields.io/github/actions/workflow/status/lozanojoaog/chatgpt-bridge/ci.yml?branch=main)](https://github.com/lozanojoaog/chatgpt-bridge/actions)
+[![npm version](https://img.shields.io/npm/v/chatgpt-bridge.svg?color=cb3837&logo=npm)](https://www.npmjs.com/package/chatgpt-bridge)
+[![license: MIT](https://img.shields.io/npm/l/chatgpt-bridge.svg?color=blue)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/lozanojoaog/chatgpt-bridge/ci.yml?branch=main&label=ci)](https://github.com/lozanojoaog/chatgpt-bridge/actions)
+[![bundle size](https://img.shields.io/badge/published%20size-15.7%20KB-success)](https://www.npmjs.com/package/chatgpt-bridge)
+[![source size](https://img.shields.io/badge/source-~900%20LOC-informational)](./src)
 
 ```bash
 npx chatgpt-bridge serve
-# → listening on http://127.0.0.1:10531/v1
 ```
 
 ```python
@@ -17,65 +18,88 @@ c = OpenAI(base_url="http://127.0.0.1:10531/v1", api_key="unused")
 img = c.images.generate(model="gpt-image-2", prompt="a fox in the woods")
 ```
 
-That's it. Same SDK you'd use against `api.openai.com` — but the bytes go through your existing ChatGPT Plus subscription.
+That's the whole demo. The OpenAI SDK calls go through the bridge, the bridge talks to ChatGPT using your existing OAuth tokens, and you get back a base64 PNG. No API key, no per-image charge — just your existing subscription.
 
 ---
 
-## What this is
+## Table of contents
 
-A local HTTP server that speaks the OpenAI API dialect. When a client calls `POST /v1/images/generations` (or `/v1/chat/completions`, `/v1/responses`, …), the bridge:
+- [Why this exists](#why-this-exists)
+- [How it works](#how-it-works)
+- [Install](#install)
+- [First-time setup](#first-time-setup)
+- [Usage](#usage)
+  - [HTTP API](#http-api)
+  - [As a library](#as-a-library)
+  - [CLI](#cli)
+- [Integrations](#integrations)
+- [Configuration](#configuration)
+- [Comparison](#comparison)
+- [Responsible use](#responsible-use)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
-1. Reads the OAuth tokens already stored at `~/.codex/auth.json` (created by the official `codex` CLI).
-2. Forwards the request to `chatgpt.com/backend-api/codex/responses` with the right OAuth headers.
-3. Translates ChatGPT's stream back to the shape the OpenAI SDK expects.
+---
 
-So any tool that talks the OpenAI API — Python SDK, Node SDK, n8n, ComfyUI, LangChain, your own scripts — can use your ChatGPT subscription as the backend.
+## Why this exists
 
-## What this is **not**
+You already pay for a ChatGPT subscription. It generates images, runs the latest models, and you use it daily. But when you want to call the same models from a script, the official path is to **pay again** through `api.openai.com` — separate billing, separate quota, often more expensive per image than your monthly subscription cost.
 
-- Not a way to bypass billing. You still need an active **ChatGPT Plus** (or Pro/Team/Enterprise) subscription.
-- Not a public API. Listens on `127.0.0.1` only. Single-user, single-machine by design.
-- Not officially endorsed by OpenAI. See [Responsible use](#responsible-use).
+The official `codex` CLI from OpenAI authenticates you over OAuth and lets you talk to the same models programmatically — but only as a CLI, only for code generation, and not as an HTTP server you can plug into other tools.
+
+This package fills that gap: it's the smallest possible HTTP proxy that **speaks the OpenAI API dialect**, terminating those calls into the OAuth-authenticated upstream that the Codex CLI already uses. Your existing OpenAI SDKs, n8n workflows, ComfyUI nodes, Claude Code skills — anything that talks `localhost:port/v1/...` — just works.
+
+## How it works
+
+```
+your code  ─►  localhost:10531/v1/...  ─►  chatgpt.com/backend-api/codex/responses
+                  (this package)            (OAuth tokens from ~/.codex/auth.json)
+```
+
+OpenAI's Responses API has a built-in `image_generation` tool. The bridge wraps your OpenAI Images request as a Responses tool call, parses the SSE stream, and returns the base64 PNG in the exact shape the OpenAI Images API uses. Your client doesn't know the difference.
+
+Read the deep dive: [docs/architecture.md](./docs/architecture.md).
 
 ---
 
 ## Install
 
-### Option A — `npx` (no install)
+### Option A — `npx` (zero install)
 
 ```bash
 npx chatgpt-bridge serve
 ```
 
-### Option B — global CLI
+### Option B — Global CLI
 
 ```bash
 npm i -g chatgpt-bridge
 chatgpt-bridge serve
 ```
 
-### Option C — as a library
+### Option C — As a library
 
 ```bash
 npm i chatgpt-bridge
 ```
 
 ```ts
-import { generateImage, Auth, Upstream, loadConfig } from "chatgpt-bridge";
+import { Auth, Upstream, generateImage, loadConfig } from "chatgpt-bridge";
 
 const cfg = loadConfig();
 const upstream = new Upstream(cfg, new Auth(cfg));
-const img = await generateImage(cfg, upstream, { prompt: "a serene mountain" });
-require("fs").writeFileSync("out.png", Buffer.from(img.b64, "base64"));
+const img = await generateImage(cfg, upstream, { prompt: "a fox" });
+require("fs").writeFileSync("fox.png", Buffer.from(img.b64, "base64"));
 ```
 
-### Option D — single binary
+### Option D — Single binary
 
 Download from [Releases](https://github.com/lozanojoaog/chatgpt-bridge/releases): `chatgpt-bridge-linux`, `chatgpt-bridge-macos`, `chatgpt-bridge.exe`.
 
 ---
 
-## First-time setup (once)
+## First-time setup
 
 You need a valid `auth.json`. The simplest way is the official Codex CLI:
 
@@ -91,48 +115,36 @@ Verify everything works:
 chatgpt-bridge doctor
 ```
 
----
+Expected output:
 
-## CLI
-
-```
-chatgpt-bridge serve              Start the local proxy server
-chatgpt-bridge gen <prompt>       Generate one image to a file (one-shot)
-chatgpt-bridge doctor             Health checks; exit 0 if healthy
-chatgpt-bridge login              Run `npx @openai/codex login`
-chatgpt-bridge version            Print version + runtime info
-```
-
-### Examples
-
-```bash
-# Start the server
-chatgpt-bridge serve --port 10531
-
-# Generate an image directly (no server needed)
-chatgpt-bridge gen "a small red fox under an oak tree, watercolor" --out fox.png
-
-# Check health
-chatgpt-bridge doctor
-# → {"status":"healthy","checks":[...]}
+```json
+{
+  "status": "healthy",
+  "checks": [
+    { "name": "auth",     "ok": true, "detail": "loaded from …/.codex/auth.json · expires in …s" },
+    { "name": "upstream", "ok": true, "detail": "HTTP 200" }
+  ]
+}
 ```
 
 ---
 
-## HTTP API
+## Usage
 
-All endpoints are OpenAI-compatible. Point any OpenAI SDK at `http://127.0.0.1:10531/v1` with any string as `apiKey` (it's ignored — auth comes from `auth.json`).
+### HTTP API
+
+All endpoints are OpenAI-compatible. Point any OpenAI SDK at `http://127.0.0.1:10531/v1` with **any string** as `apiKey` — it's ignored; auth comes from `auth.json`.
 
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/health` | Bridge state (auth, rate, version) |
-| `GET` | `/v1/models` | Lists models from upstream + image-gen aliases |
+| `GET` | `/v1/models` | List models from upstream + image-gen aliases |
 | `POST` | `/v1/responses` | Pass-through to ChatGPT's Responses API |
 | `POST` | `/v1/chat/completions` | Translated to `/v1/responses` upstream |
 | `POST` | `/v1/images/generations` | Generates a base64 PNG via the `image_generation` tool |
 | `*` | `/v1/*` | Catch-all pass-through (forward-compat) |
 
-### Image generation
+#### Image generation
 
 ```bash
 curl http://127.0.0.1:10531/v1/images/generations \
@@ -145,55 +157,77 @@ curl http://127.0.0.1:10531/v1/images/generations \
   }' | jq -r '.data[0].b64_json' | base64 --decode > out.png
 ```
 
-Response shape (OpenAI Images API exact match):
+Response shape (matches OpenAI Images API exactly):
 
 ```json
 {
   "created": 1714680000,
-  "data": [
-    { "b64_json": "iVBORw0KGgo...", "revised_prompt": "..." }
-  ],
+  "data": [{ "b64_json": "iVBORw0KGgo...", "revised_prompt": "..." }],
   "usage": { "input_tokens": 0, "output_tokens": 0, "total_tokens": 0 }
 }
 ```
 
----
-
-## Use it in your tools
-
-### Python
-
-```python
-from openai import OpenAI
-import base64
-
-c = OpenAI(base_url="http://127.0.0.1:10531/v1", api_key="unused")
-img = c.images.generate(model="gpt-image-2", prompt="a fox")
-open("fox.png", "wb").write(base64.b64decode(img.data[0].b64_json))
-```
-
-### Node / TypeScript
+### As a library
 
 ```ts
-import OpenAI from "openai";
-import { writeFileSync } from "node:fs";
+import { generateImage, Auth, Upstream, loadConfig } from "chatgpt-bridge";
 
-const c = new OpenAI({ baseURL: "http://127.0.0.1:10531/v1", apiKey: "unused" });
-const img = await c.images.generate({ model: "gpt-image-2", prompt: "a fox" });
-writeFileSync("fox.png", Buffer.from(img.data[0].b64_json, "base64"));
+const cfg = loadConfig();
+const upstream = new Upstream(cfg, new Auth(cfg));
+const img = await generateImage(cfg, upstream, {
+  prompt: "a serene mountain landscape at dawn",
+  size: "1024x1024",
+  quality: "high",
+});
+// img.b64        → base64 PNG string
+// img.revisedPrompt → optional, may differ from input prompt
+// img.usage      → token usage from upstream
 ```
 
-### Claude Code (as a Skill)
+### CLI
 
-Copy `examples/claude-code-skill/` into `~/.claude/skills/` and Claude Code can call image generation directly. See [examples/claude-code-skill/SKILL.md](./examples/claude-code-skill/SKILL.md).
+```
+chatgpt-bridge serve              Start the local proxy server
+chatgpt-bridge gen <prompt>       Generate one image to a file (one-shot)
+chatgpt-bridge doctor             Health checks; exit 0 if healthy
+chatgpt-bridge login              Run `npx @openai/codex login`
+chatgpt-bridge version            Print version + runtime info
+```
 
-### n8n / Make / Zapier
+#### Examples
 
-Add an HTTP Request node pointing at `http://127.0.0.1:10531/v1/images/generations` with the same JSON body as above. See [examples/n8n.json](./examples/n8n.json) for an importable workflow.
+```bash
+# Start the server (default :10531)
+chatgpt-bridge serve
 
-### ComfyUI
+# One-shot image to a file
+chatgpt-bridge gen "a small red fox under an oak tree, watercolor" --out fox.png
 
-Use any "OpenAI Image" custom node and set the API base to `http://127.0.0.1:10531/v1`.
+# Use a different port
+chatgpt-bridge serve --port 11000
+
+# Check health
+chatgpt-bridge doctor
+```
+
+---
+
+## Integrations
+
+Working snippets for the most common tools:
+
+| Tool | Snippet |
+|---|---|
+| **OpenAI Python SDK** | [docs/integrations.md#openai-python-sdk](./docs/integrations.md#openai-python-sdk) |
+| **OpenAI Node SDK** | [docs/integrations.md#openai-node-sdk](./docs/integrations.md#openai-node-sdk) |
+| **Vercel AI SDK** | [docs/integrations.md#vercel-ai-sdk](./docs/integrations.md#vercel-ai-sdk) |
+| **LangChain** | [docs/integrations.md#langchain](./docs/integrations.md#langchain) |
+| **n8n** | [examples/n8n.json](./examples/n8n.json) |
+| **ComfyUI** | [docs/integrations.md#comfyui](./docs/integrations.md#comfyui) |
+| **Claude Code Skill** | [examples/claude-code-skill/](./examples/claude-code-skill/) |
+| **curl + jq** | [examples/curl.sh](./examples/curl.sh) |
+
+Full integrations guide: [docs/integrations.md](./docs/integrations.md).
 
 ---
 
@@ -205,9 +239,9 @@ Defaults are sensible. Override via environment variables:
 |---|---|---|
 | `CHATGPT_BRIDGE_HOST` | `127.0.0.1` | Bind host |
 | `CHATGPT_BRIDGE_PORT` | `10531` | Bind port |
-| `CHATGPT_BRIDGE_AUTH_FILE` | (auto-detect) | Override path to `auth.json` |
+| `CHATGPT_BRIDGE_AUTH_FILE` | (auto) | Override path to `auth.json` |
 | `CHATGPT_BRIDGE_IMAGE_MODEL` | `gpt-5.4-mini` | Text model that invokes the image tool |
-| `CHATGPT_BRIDGE_CLIENT_ID` | `app_EMoamEEZ73f0CkXaXp7hrann` | OAuth client_id (matches Codex CLI) |
+| `CHATGPT_BRIDGE_CLIENT_ID` | (Codex CLI's client_id) | OAuth client_id |
 
 `auth.json` lookup order (first match wins):
 
@@ -220,37 +254,65 @@ Defaults are sensible. Override via environment variables:
 
 ---
 
+## Comparison
+
+| | OpenAI API | `chatgpt-bridge` | Reverse-eng (`acheong08/ChatGPT`, etc.) |
+|---|---|---|---|
+| Auth | API key | OAuth (Codex flow) | Cookie / session token |
+| Cost per image | $0.02–$0.21 | $0 (subscription) | $0 (subscription) |
+| Stability | Highest | High (uses developer endpoint) | Low (consumer endpoint hardened) |
+| Setup | `OPENAI_API_KEY=...` | `npx @openai/codex login` | Browser cookie extraction |
+| ToS posture | Sanctioned | Gray-area but uses official auth | Generally violates ToS |
+| Maintenance | None on your side | Occasional patches | Constant cat-and-mouse |
+| Best for | Production | Personal scripts, integrations, Claude Code | Hacking, learning |
+
+If you need production reliability and can spend per image, use the OpenAI API. If you have a subscription and want your scripts to use it, this. If you want to learn how the consumer endpoints work, the reverse-eng projects are educational.
+
+---
+
 ## Responsible use
 
-- **Personal use, single user.** This isn't a SaaS or a way to share one subscription across people.
-- **OpenAI's Terms of Use** prohibit automated access to consumer surfaces. Use the bridge for personal scripts and integrations on your own machine.
-- **No telemetry, no phoning home.** Everything stays on `localhost`. Read the source — there are ~900 lines of it.
-- **Conservative rate limits** are enforced by default (`rateHourlyHard = 200`).
+- **Personal use, single user.** Not a SaaS, not a way to share one subscription across users.
+- **OpenAI's Terms of Use** generally discourage automated access to consumer surfaces. The bridge ships with conservative rate limits and human-like jitter on purpose.
+- **No telemetry.** Zero outbound traffic except to `chatgpt.com` and `auth.openai.com`. Read the source.
+- **Tokens stay local.** `auth.json` is read, refreshed, and written back to the same file. Never copied elsewhere.
+
+Full security model: [docs/security.md](./docs/security.md).
 
 ---
 
-## How it works (one paragraph)
+## Documentation
 
-OpenAI's Responses API exposes `image_generation` as a built-in tool. When you POST to `/v1/responses` with `tools: [{type: "image_generation"}]`, the upstream model invokes it and the SSE stream contains an `image_generation_call` event whose `result` field is the base64 PNG. The bridge takes a regular OpenAI Images request, wraps it in the right Responses payload, parses the stream, and returns the OpenAI Images response shape. The OAuth headers (`Authorization: Bearer …`, `chatgpt-account-id: …`, `OpenAI-Beta: responses=experimental`) come from the `auth.json` that the official `codex` CLI maintains.
+- [Architecture](./docs/architecture.md) — how the bridge works, end to end.
+- [Integrations](./docs/integrations.md) — drop-in snippets for popular tools.
+- [Troubleshooting](./docs/troubleshooting.md) — common errors, common fixes.
+- [Security model](./docs/security.md) — threat model, supply-chain notes.
+- [FAQ](./docs/faq.md) — questions people actually ask.
+- [Releasing](./docs/releasing.md) — for maintainers.
 
 ---
 
-## Development
+## Contributing
+
+The codebase is intentionally small (~900 LOC across 7 files). Read it end to end before opening a PR.
 
 ```bash
 git clone https://github.com/lozanojoaog/chatgpt-bridge.git
 cd chatgpt-bridge
 bun install
-bun run dev          # serve in watch mode
-bun run typecheck    # tsc --noEmit
-bun test             # run tests
-bun run build        # produce dist/
+bun run typecheck
+bun test
+bun run lint
 ```
 
-The codebase is intentionally small. Read `src/` start to finish in 30 minutes.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+
+For security issues: [SECURITY.md](./SECURITY.md). Do not file public issues.
 
 ---
 
 ## License
 
-MIT © [João Gabriel Lozano](https://github.com/lozanojoaog)
+MIT © [João Gabriel Lozano](https://github.com/lozanojoaog) — 2026
+
+This project is **clean-room implemented**. It contains no code copied from `openai-oauth`, `ima2-gen`, or any other source under non-MIT-compatible licenses. The OAuth flow follows RFC 6749 and the upstream contract is observed from public OpenAI documentation.

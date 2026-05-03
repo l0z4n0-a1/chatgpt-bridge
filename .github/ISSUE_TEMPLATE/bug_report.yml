@@ -1,0 +1,77 @@
+name: Bug report
+description: Something broke. Tell me what.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing. Before submitting, please run `chatgpt-bridge doctor` and include its output below.
+        **Never paste the contents of `auth.json` or any token. Tokens are sensitive credentials.**
+
+  - type: input
+    id: version
+    attributes:
+      label: chatgpt-bridge version
+      description: Output of `chatgpt-bridge version` (the `version` field).
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      description: "node --version  or  bun --version, plus your OS."
+      placeholder: "node v22.10.0, macOS 14.5"
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `chatgpt-bridge doctor`
+      description: Paste the full JSON output. It contains no tokens.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, what actually happened?
+      placeholder: |
+        I ran `chatgpt-bridge gen "..."` and expected a PNG, but got HTTP 502.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: Minimal commands or code that reproduces the issue. **Redact any prompts you don't want public.**
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: stderr from the bridge, error messages from your client, etc. Redact tokens.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-submit checklist
+      options:
+        - label: I confirmed `chatgpt-bridge doctor` reports auth and upstream as healthy (or attached the failing output).
+          required: true
+        - label: I removed all token values from the issue.
+          required: true
+        - label: I searched [existing issues](https://github.com/lozanojoaog/chatgpt-bridge/issues) for duplicates.
+          required: true
