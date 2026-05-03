@@ -16,23 +16,51 @@ import os from "node:os";
 import path from "node:path";
 import { runInstall } from "../src/install.ts";
 
+/**
+ * Run a test inside a clean tmp directory pretending to be $HOME. Sets
+ * `$CHATGPT_BRIDGE_HOME` (which the install module honours) and the
+ * platform-specific app-data env vars so `appDataDir()` resolves under
+ * the tmp dir on every OS. Cleans up on exit.
+ */
+// Restore an env var to its prior value, deleting the key if it was undefined
+// before. (Direct assignment of `undefined` becomes the literal string
+// "undefined" — a known Node footgun.)
+function restoreEnv(key: string, prev: string | undefined): void {
+	if (prev === undefined) {
+		delete process.env[key];
+	} else {
+		process.env[key] = prev;
+	}
+}
+
 async function withTmpHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cgb-install-"));
-	const prevHome = process.env.HOME;
-	const prevUserprofile = process.env.USERPROFILE;
-	const prevAppdata = process.env.APPDATA;
-	const prevXdg = process.env.XDG_CONFIG_HOME;
-	process.env.HOME = dir;
-	process.env.USERPROFILE = dir;
+	const KEYS = [
+		"CHATGPT_BRIDGE_HOME",
+		"APPDATA",
+		"XDG_CONFIG_HOME",
+		"CHATGPT_BRIDGE_AUTH_FILE",
+		"CODEX_HOME",
+		"CHATGPT_LOCAL_HOME",
+	] as const;
+	const prev = Object.fromEntries(KEYS.map((k) => [k, process.env[k]])) as Record<
+		(typeof KEYS)[number],
+		string | undefined
+	>;
+	process.env.CHATGPT_BRIDGE_HOME = dir;
 	process.env.APPDATA = path.join(dir, "AppData", "Roaming");
 	process.env.XDG_CONFIG_HOME = path.join(dir, ".config");
+	// Pin the auth-file lookup into the tmp dir too, so Auth.ensure() in
+	// install round-trip tests doesn't pick up the developer's real auth.json.
+	process.env.CHATGPT_BRIDGE_AUTH_FILE = path.join(dir, ".codex", "auth.json");
+	// biome-ignore lint/performance/noDelete: clear inherited fallbacks.
+	delete process.env.CODEX_HOME;
+	// biome-ignore lint/performance/noDelete: clear inherited fallbacks.
+	delete process.env.CHATGPT_LOCAL_HOME;
 	try {
 		return await fn(dir);
 	} finally {
-		process.env.HOME = prevHome;
-		process.env.USERPROFILE = prevUserprofile;
-		process.env.APPDATA = prevAppdata;
-		process.env.XDG_CONFIG_HOME = prevXdg;
+		for (const k of KEYS) restoreEnv(k, prev[k]);
 		await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
 	}
 }

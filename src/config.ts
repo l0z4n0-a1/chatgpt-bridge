@@ -9,6 +9,18 @@ import os from "node:os";
 import path from "node:path";
 
 /**
+ * Resolve the user's home directory.
+ *
+ * Honours `$CHATGPT_BRIDGE_HOME` as an override (useful for tests, CI
+ * sandboxes, and non-standard system layouts). Falls back to `os.homedir()`,
+ * which on POSIX consults `getpwuid_r` and ignores `$HOME` — so the env-var
+ * override is the portable way for callers to redirect.
+ */
+export function homeDir(): string {
+	return process.env.CHATGPT_BRIDGE_HOME ?? os.homedir();
+}
+
+/**
  * Default chat model. Single source of truth — used by /v1/chat/completions,
  * the CLI `chat` verb, the MCP `chat` tool, and the capability catalog.
  * Bump in one place, not nine.
@@ -60,14 +72,14 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
 		rateHourlyHard: overrides.rateHourlyHard ?? DEFAULTS.rateHourlyHard,
 		imageModel: overrides.imageModel ?? env.CHATGPT_BRIDGE_IMAGE_MODEL ?? DEFAULTS.imageModel,
 		authFilePath: overrides.authFilePath ?? env.CHATGPT_BRIDGE_AUTH_FILE,
-		dataHome: overrides.dataHome ?? path.join(os.homedir(), ".chatgpt-bridge"),
+		dataHome: overrides.dataHome ?? path.join(homeDir(), ".chatgpt-bridge"),
 	};
 	return cfg;
 }
 
 /** Resolve auth file lookup order. First match wins. */
 export function authFileCandidates(cfg: Config): string[] {
-	const home = os.homedir();
+	const home = homeDir();
 	const list = [
 		cfg.authFilePath,
 		process.env.CHATGPT_LOCAL_HOME

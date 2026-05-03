@@ -15,10 +15,9 @@
  */
 
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { Auth, tokenExpiryMs } from "./auth.ts";
-import { type Config, loadConfig } from "./config.ts";
+import { type Config, homeDir, loadConfig } from "./config.ts";
 
 const MCP_ENTRY_NAME = "chatgpt-bridge";
 const MCP_COMMAND = { command: "npx", args: ["-y", "chatgpt-bridge", "mcp"] } as const;
@@ -56,18 +55,14 @@ export interface InstallOptions {
 
 /* ------------------------- platform path helpers ------------------------- */
 
-function home(): string {
-	return os.homedir();
-}
-
 function appDataDir(appName: string): string {
 	if (process.platform === "darwin") {
-		return path.join(home(), "Library", "Application Support", appName);
+		return path.join(homeDir(), "Library", "Application Support", appName);
 	}
 	if (process.platform === "win32") {
-		return path.join(process.env.APPDATA ?? path.join(home(), "AppData", "Roaming"), appName);
+		return path.join(process.env.APPDATA ?? path.join(homeDir(), "AppData", "Roaming"), appName);
 	}
-	return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home(), ".config"), appName);
+	return path.join(process.env.XDG_CONFIG_HOME ?? path.join(homeDir(), ".config"), appName);
 }
 
 /* ------------------------------ JSON safe I/O ----------------------------- */
@@ -166,7 +161,7 @@ async function applyMcpJson(
 function pathClaudeCode(): string {
 	// User-global config that Claude Code reads for all projects.
 	// Project-scoped install (./claude.json) is left to the user.
-	return path.join(home(), ".claude.json");
+	return path.join(homeDir(), ".claude.json");
 }
 
 function pathClaudeDesktop(): string {
@@ -174,11 +169,11 @@ function pathClaudeDesktop(): string {
 }
 
 function pathCursor(): string {
-	return path.join(home(), ".cursor", "mcp.json");
+	return path.join(homeDir(), ".cursor", "mcp.json");
 }
 
 function pathZed(): string {
-	return path.join(home(), ".config", "zed", "settings.json");
+	return path.join(homeDir(), ".config", "zed", "settings.json");
 }
 
 function pathCline(): string {
@@ -196,15 +191,15 @@ function pathCline(): string {
 }
 
 function pathContinue(): string {
-	return path.join(home(), ".continue", "config.json");
+	return path.join(homeDir(), ".continue", "config.json");
 }
 
 function pathGeminiCli(): string {
-	return path.join(home(), ".gemini", "settings.json");
+	return path.join(homeDir(), ".gemini", "settings.json");
 }
 
 function pathCodex(): string {
-	return path.join(home(), ".codex", "config.toml");
+	return path.join(homeDir(), ".codex", "config.toml");
 }
 
 /* ---------------- adaptor: Codex (TOML, not JSON) ------------------------- */
@@ -289,17 +284,17 @@ async function detectInstalled(target: Target): Promise<boolean> {
 		case "claude-desktop":
 			return fileExists(path.dirname(pathClaudeDesktop()));
 		case "codex":
-			return fileExists(path.join(home(), ".codex"));
+			return fileExists(path.join(homeDir(), ".codex"));
 		case "cursor":
-			return fileExists(path.join(home(), ".cursor"));
+			return fileExists(path.join(homeDir(), ".cursor"));
 		case "zed":
-			return fileExists(path.join(home(), ".config", "zed"));
+			return fileExists(path.join(homeDir(), ".config", "zed"));
 		case "cline":
 			return fileExists(path.dirname(pathCline()));
 		case "continue":
-			return fileExists(path.join(home(), ".continue"));
+			return fileExists(path.join(homeDir(), ".continue"));
 		case "gemini-cli":
-			return fileExists(path.join(home(), ".gemini"));
+			return fileExists(path.join(homeDir(), ".gemini"));
 		case "aider":
 		case "openai-sdk":
 			return true; // always "installable" — they emit snippets
