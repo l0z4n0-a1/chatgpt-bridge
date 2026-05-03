@@ -4,6 +4,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added — MCP mirror
+
+- **MCP `chat` tool** — gains `attachments?: string[]` argument. Local paths or URLs auto-detect image vs. text and become vision input or contextual `input_file` parts. Same 25 MiB / 100 MiB caps as the HTTP and CLI surfaces.
+- **MCP `generate_image` tool** — gains `references?: string[]` argument. Up to 8 reference images shape style/composition. Identical wire to CLI `--ref` and HTTP `reference_images[]`.
+- Tool descriptions updated to surface the new capabilities so MCP-aware agents (Claude Desktop, Cursor, Zed, Cline, Continue) see them at tool-discovery time.
+
 ### Added — CLI verbs (chat, image, models)
 
 - **`chatgpt-bridge chat <prompt|@file|->`** — send a text or multimodal message; print reply (streamed to tty by default, JSON when piped). `--attach <path|url>` (repeatable) for files/images. `--system <text|@file>` reads system prompt from string or file. `--model`, `--stream`/`--no-stream`, `--json`, `--dry-run`. Stdin `-` accepts a single prompt or JSONL batch (one job per line).

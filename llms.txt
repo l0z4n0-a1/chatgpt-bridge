@@ -41,7 +41,10 @@ img = c.images.generate(model="gpt-image-2", prompt="a fox")
 }
 ```
 
-Exposes 3 tools: `generate_image`, `chat`, `health`.
+Exposes 3 tools (mirrors of the CLI surface):
+- `chat(prompt, system?, model?, attachments?)` — text or multimodal message; optional file/image attachments.
+- `generate_image(prompt, out?, size?, quality?, references?)` — generate PNG; optional reference images shape style.
+- `health()` — bridge state snapshot.
 
 ### HTTP API (any OpenAI SDK)
 
