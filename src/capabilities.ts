@@ -38,7 +38,7 @@ export interface Capabilities {
 	package: "chatgpt-bridge";
 	wire: {
 		stdout: "json-on-pipe-or-flag";
-		stderr: "json-on-error";
+		stderr: "json-on-arg-validation-or-fatal-error";
 		exit_codes: Record<string, string>;
 	};
 	global_flags: Record<string, CapabilityArg>;
@@ -67,7 +67,7 @@ export const CAPABILITIES: Capabilities = {
 	package: "chatgpt-bridge",
 	wire: {
 		stdout: "json-on-pipe-or-flag",
-		stderr: "json-on-error",
+		stderr: "json-on-arg-validation-or-fatal-error",
 		exit_codes: EXIT_CODES,
 	},
 	global_flags: GLOBAL_FLAGS,
@@ -79,6 +79,7 @@ export const CAPABILITIES: Capabilities = {
 	notes: [
 		"All verbs default to JSON output when stdout is not a tty.",
 		"Errors include a structured `remedy` field whenever an automated next step exists.",
+		"Verb-completion results (including ok:false from upstream/attachment errors) go to stdout as JSON. Argument-validation and fatal errors go to stderr.",
 		"Stdin '-' for chat/image accepts a single prompt or JSONL for batch (one job per line).",
 		"Any string flag accepting `@path` will read the file contents (e.g. --system @prompt.md).",
 		"Bridge extensions (non-portable to api.openai.com): `reference_images[]` on /v1/images/generations, `input_file` content-part on /v1/chat/completions.",

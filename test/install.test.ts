@@ -172,6 +172,97 @@ describe("install: uninstall is idempotent and bypasses auth", () => {
 	});
 });
 
+describe("install: refuses to overwrite garbage", () => {
+	test("non-JSON existing file is preserved with structured error", async () => {
+		await withTmpHome(async (home) => {
+			// Pre-seed valid auth so we get past the auth gate.
+			const codexDir = path.join(home, ".codex");
+			await fs.mkdir(codexDir, { recursive: true });
+			const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+			const enc = (o: unknown) =>
+				Buffer.from(JSON.stringify(o)).toString("base64url").replace(/=+$/, "");
+			const idTok = `${enc({ alg: "none" })}.${enc({
+				exp: farFuture,
+				"https://api.openai.com/auth": { chatgpt_account_id: "acc-test" },
+			})}.sig`;
+			const accessTok = `${enc({ alg: "none" })}.${enc({ exp: farFuture })}.sig`;
+			await fs.writeFile(
+				path.join(codexDir, "auth.json"),
+				JSON.stringify({
+					auth_mode: "chatgpt",
+					tokens: {
+						id_token: idTok,
+						access_token: accessTok,
+						refresh_token: "rt",
+						account_id: "acc-test",
+					},
+					last_refresh: new Date().toISOString(),
+				}),
+			);
+
+			// Pre-seed a non-JSON cursor mcp.json (e.g. corrupted whitespace
+			// from a prior tool). The install must refuse to overwrite it.
+			const cursorDir = path.join(home, ".cursor");
+			await fs.mkdir(cursorDir, { recursive: true });
+			const cursorFile = path.join(cursorDir, "mcp.json");
+			const garbage = "this is not JSON\nfoo bar baz\n";
+			await fs.writeFile(cursorFile, garbage);
+
+			const r = await runInstall("cursor");
+			const single = r as {
+				ok: boolean;
+				error?: string;
+				remedy?: { action?: string; path?: string };
+			};
+			expect(single.ok).toBe(false);
+			expect(single.error).toMatch(/refus.*overwrite/i);
+			expect(single.remedy?.path).toBe(cursorFile);
+
+			// File contents preserved exactly.
+			const after = await fs.readFile(cursorFile, "utf-8");
+			expect(after).toBe(garbage);
+		});
+	});
+
+	test("empty (whitespace-only) file is treated as absent and overwritten", async () => {
+		await withTmpHome(async (home) => {
+			// Pre-seed valid auth.
+			const codexDir = path.join(home, ".codex");
+			await fs.mkdir(codexDir, { recursive: true });
+			const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+			const enc = (o: unknown) =>
+				Buffer.from(JSON.stringify(o)).toString("base64url").replace(/=+$/, "");
+			const idTok = `${enc({ alg: "none" })}.${enc({
+				exp: farFuture,
+				"https://api.openai.com/auth": { chatgpt_account_id: "acc-test" },
+			})}.sig`;
+			const accessTok = `${enc({ alg: "none" })}.${enc({ exp: farFuture })}.sig`;
+			await fs.writeFile(
+				path.join(codexDir, "auth.json"),
+				JSON.stringify({
+					auth_mode: "chatgpt",
+					tokens: {
+						id_token: idTok,
+						access_token: accessTok,
+						refresh_token: "rt",
+						account_id: "acc-test",
+					},
+					last_refresh: new Date().toISOString(),
+				}),
+			);
+
+			const cursorDir = path.join(home, ".cursor");
+			await fs.mkdir(cursorDir, { recursive: true });
+			await fs.writeFile(path.join(cursorDir, "mcp.json"), "   \n   \t  ");
+
+			const r = await runInstall("cursor");
+			const single = r as { ok: boolean; already_installed?: boolean };
+			expect(single.ok).toBe(true);
+			expect(single.already_installed).toBe(false);
+		});
+	});
+});
+
 describe("install: --for all", () => {
 	test("returns array, skips runtimes not present on disk", async () => {
 		await withTmpHome(async () => {

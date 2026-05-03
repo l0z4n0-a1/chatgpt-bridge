@@ -72,12 +72,28 @@ function appDataDir(appName: string): string {
 
 /* ------------------------------ JSON safe I/O ----------------------------- */
 
-async function readJson<T>(p: string): Promise<T | undefined> {
+type JsonReadResult<T> =
+	| { state: "ok"; data: T }
+	| { state: "absent" }
+	| { state: "unparseable"; cause: string };
+
+async function readJson<T>(p: string): Promise<JsonReadResult<T>> {
+	let raw: string;
 	try {
-		const raw = await fs.readFile(p, "utf-8");
-		return JSON.parse(raw) as T;
-	} catch {
-		return undefined;
+		raw = await fs.readFile(p, "utf-8");
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException).code === "ENOENT") return { state: "absent" };
+		return { state: "unparseable", cause: (e as Error).message };
+	}
+	if (raw.trim().length === 0) {
+		// Treat an empty (or whitespace-only) file as absent: it's safe to
+		// write a fresh JSON document over content that has no information.
+		return { state: "absent" };
+	}
+	try {
+		return { state: "ok", data: JSON.parse(raw) as T };
+	} catch (e) {
+		return { state: "unparseable", cause: (e as Error).message };
 	}
 }
 
@@ -103,11 +119,31 @@ interface McpFile {
 	[k: string]: unknown;
 }
 
+class InstallTargetError extends Error {
+	constructor(
+		message: string,
+		readonly remedy: Record<string, unknown>,
+	) {
+		super(message);
+		this.name = "InstallTargetError";
+	}
+}
+
 async function applyMcpJson(
 	configPath: string,
 	options: InstallOptions,
 ): Promise<{ already: boolean }> {
-	const current = (await readJson<McpFile>(configPath)) ?? {};
+	const read = await readJson<McpFile>(configPath);
+	if (read.state === "unparseable") {
+		throw new InstallTargetError(
+			`Refusing to overwrite ${configPath}: existing file is not valid JSON (${read.cause}).`,
+			{
+				action: "Inspect or remove the file manually, then re-run install.",
+				path: configPath,
+			},
+		);
+	}
+	const current = read.state === "ok" ? read.data : {};
 	const servers = (current.mcpServers ?? {}) as Record<string, unknown>;
 	const present = Object.hasOwn(servers, MCP_ENTRY_NAME);
 
@@ -127,8 +163,8 @@ async function applyMcpJson(
 /* -------------------------- per-target installers ------------------------- */
 
 function pathClaudeCode(): string {
-	// Project-local first; user-global fallback. We pick global so the bridge
-	// is available across all projects. Project-local install is a manual step.
+	// User-global config that Claude Code reads for all projects.
+	// Project-scoped install (./claude.json) is left to the user.
 	return path.join(home(), ".claude.json");
 }
 
@@ -145,30 +181,11 @@ function pathZed(): string {
 }
 
 function pathCline(): string {
-	if (process.platform === "darwin") {
-		return path.join(
-			appDataDir("Code"),
-			"User",
-			"globalStorage",
-			"saoudrizwan.claude-dev",
-			"settings",
-			"cline_mcp_settings.json",
-		);
-	}
-	if (process.platform === "win32") {
-		return path.join(
-			appDataDir("Code"),
-			"User",
-			"globalStorage",
-			"saoudrizwan.claude-dev",
-			"settings",
-			"cline_mcp_settings.json",
-		);
-	}
+	// VS Code's user globalStorage. appDataDir("Code") resolves correctly on
+	// all three platforms (uses APPDATA on win32, ~/Library/... on darwin,
+	// $XDG_CONFIG_HOME (or ~/.config) on linux).
 	return path.join(
-		home(),
-		".config",
-		"Code",
+		appDataDir("Code"),
 		"User",
 		"globalStorage",
 		"saoudrizwan.claude-dev",
@@ -359,18 +376,32 @@ async function installSingle(
 		}
 	})();
 
-	const { already } = await applyMcpJson(configPath, options);
-	const verb = options.uninstall ? "removed from" : already ? "already in" : "registered with";
-	return {
-		ok: true,
-		for: target,
-		config_path: configPath,
-		already_installed: already && !options.uninstall,
-		auth,
-		next_step: options.uninstall
-			? `Restart ${target} to drop the bridge entry.`
-			: `Restart ${target} to load the bridge MCP server. ${verb} ${configPath}.`,
-	};
+	try {
+		const { already } = await applyMcpJson(configPath, options);
+		const verb = options.uninstall ? "removed from" : already ? "already in" : "registered with";
+		return {
+			ok: true,
+			for: target,
+			config_path: configPath,
+			already_installed: already && !options.uninstall,
+			auth,
+			next_step: options.uninstall
+				? `Restart ${target} to drop the bridge entry.`
+				: `Restart ${target} to load the bridge MCP server. ${verb} ${configPath}.`,
+		};
+	} catch (e) {
+		if (e instanceof InstallTargetError) {
+			return {
+				ok: false,
+				for: target,
+				config_path: configPath,
+				error: e.message,
+				remedy: e.remedy,
+				auth,
+			};
+		}
+		throw e;
+	}
 }
 
 /**

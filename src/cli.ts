@@ -128,7 +128,11 @@ program
 						why: "Re-run after a brief wait; transient upstream errors are common.",
 					});
 				}
-				await res.body?.cancel();
+				// Drain the body fully. Don't call body.cancel() on Windows +
+				// Node 24: the abort path triggers a libuv UV_HANDLE_CLOSING
+				// assertion that aborts the process with a non-zero exit code,
+				// even when the verb otherwise succeeded.
+				await res.text().catch(() => {});
 			} catch (e) {
 				checks.push({ name: "upstream", ok: false, detail: (e as Error).message });
 				remedy.push({
@@ -148,7 +152,17 @@ program
 		};
 		if (remedy.length > 0) out.remedy = remedy;
 		writeJson(out);
-		process.exit(allOk ? 0 : 1);
+		// Don't call process.exit on the success path. On Windows + Node 24,
+		// the global fetch's keep-alive socket triggers a libuv
+		// UV_HANDLE_CLOSING assertion during synchronous teardown, aborting
+		// with a non-zero exit code despite the verb succeeding. Letting Node
+		// exit naturally lets the agent runtime close the socket cleanly.
+		// We still need a non-zero exit on failure: schedule it after Node
+		// has drained handles.
+		if (!allOk) {
+			setImmediate(() => process.exit(1));
+		}
+		// Exit code on success: 0 (default when event loop empties).
 	});
 
 /* ------------------------------- login ---------------------------------- */
@@ -353,6 +367,27 @@ program
 					};
 				}
 
+				// Guard: refuse empty prompt. Stdin closed without input, or a
+				// batch line with empty `prompt`, are user errors — not silent
+				// upstream calls that would burn quota.
+				if (job && !job.prompt.trim()) {
+					process.exit(
+						writeError("empty prompt", {
+							remedy: { cmd: "chatgpt-bridge chat 'your prompt here'" },
+						}),
+					);
+				}
+				if (jobs) {
+					const empty = jobs.findIndex((j) => !j.prompt || !String(j.prompt).trim());
+					if (empty >= 0) {
+						process.exit(
+							writeError(`empty prompt on stdin job #${empty + 1}`, {
+								remedy: { action: "ensure each JSONL line has a non-empty 'prompt' field" },
+							}),
+						);
+					}
+				}
+
 				if (opts.dryRun) {
 					writeJson({
 						ok: true,
@@ -484,7 +519,7 @@ function registerImageCommand(name: "image" | "gen", deprecated: boolean): void 
 				},
 			) => {
 				if (deprecated) {
-					process.stderr.write("warn: 'gen' is deprecated; use 'image'. Forwarding...\n");
+					process.stderr.write("warn: 'gen' is deprecated, use 'image'.\n");
 				}
 				const cfg = loadConfig();
 				try {
@@ -521,6 +556,26 @@ function registerImageCommand(name: "image" | "gen", deprecated: boolean): void 
 							quality: opts.quality,
 							moderation: opts.moderation,
 						};
+					}
+
+					// Guard: refuse empty prompt. An empty image prompt would still
+					// generate an image at full cost, so we fail fast.
+					if (job && !job.prompt.trim()) {
+						process.exit(
+							writeError("empty prompt", {
+								remedy: { cmd: "chatgpt-bridge image 'a fox' --out fox.png" },
+							}),
+						);
+					}
+					if (jobs) {
+						const empty = jobs.findIndex((j) => !j.prompt || !String(j.prompt).trim());
+						if (empty >= 0) {
+							process.exit(
+								writeError(`empty prompt on stdin job #${empty + 1}`, {
+									remedy: { action: "ensure each JSONL line has a non-empty 'prompt' field" },
+								}),
+							);
+						}
 					}
 
 					if (opts.dryRun) {

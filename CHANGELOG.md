@@ -4,6 +4,19 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Polish (post-QA pass)
+
+- **Empty-prompt guard** on `chat` and `image` — refuses empty prompts (from missing arg, empty stdin, or empty `prompt` field in a JSONL batch line) before reaching the upstream. Emits structured `remedy` with the correct usage example. Prevents quota waste on accidental empty calls.
+- **`install` refuses to overwrite garbage** — detects when the target config file exists but is not valid JSON (e.g. the corrupted/null-byte `~/.cursor/mcp.json` files some users have inherited from prior tools) and returns `{ok:false, error, remedy:{action,path}}`. The original file is preserved untouched. Empty/whitespace-only files are still safe to overwrite.
+- **`doctor` exit code on Windows + Node 24** — works around a libuv `UV_HANDLE_CLOSING` assertion that fired during synchronous teardown after the global fetch's keep-alive socket. The fix lets Node drain handles before exiting on the success path; failure path still uses `setImmediate(() => process.exit(1))`. Bun was already unaffected.
+- **`pathCline` cross-platform** — collapsed three near-identical platform branches into one call to `appDataDir("Code")` (which resolves correctly on darwin/linux/win32). Same behavior, half the code.
+- **`gen` deprecation message** trimmed from `"warn: 'gen' is deprecated; use 'image'. Forwarding..."` to `"warn: 'gen' is deprecated, use 'image'."`.
+- **`capabilities.wire.stderr` description** sharpened from `"json-on-error"` to `"json-on-arg-validation-or-fatal-error"` and a clarifying note added: verb-completion results (including `ok:false` from upstream/attachment errors) go to **stdout**; argument-validation and fatal errors go to **stderr**. Agents now have an unambiguous parsing rule.
+
+### Version
+
+- **Bumped to 0.3.0.** This release adds 5 new verbs (`install`, `capabilities`, `chat`, `image`, `models`), the multimodal surface, and the agent-native conventions. Backward-compatible: all 0.2.0 endpoints, MCP tools, and the `gen` CLI verb continue to work.
+
 ### Added — MCP mirror
 
 - **MCP `chat` tool** — gains `attachments?: string[]` argument. Local paths or URLs auto-detect image vs. text and become vision input or contextual `input_file` parts. Same 25 MiB / 100 MiB caps as the HTTP and CLI surfaces.
