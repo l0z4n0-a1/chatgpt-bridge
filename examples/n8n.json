@@ -1,0 +1,48 @@
+{
+	"name": "ChatGPT Bridge — image generation",
+	"nodes": [
+		{
+			"parameters": {},
+			"id": "trigger",
+			"name": "When clicking 'Test workflow'",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [240, 300]
+		},
+		{
+			"parameters": {
+				"method": "POST",
+				"url": "http://127.0.0.1:10531/v1/images/generations",
+				"sendBody": true,
+				"contentType": "json",
+				"jsonBody": "={\n  \"model\": \"gpt-image-2\",\n  \"prompt\": \"a tiny dragon perched on a stack of books\",\n  \"size\": \"1024x1024\",\n  \"quality\": \"high\"\n}",
+				"options": { "response": { "response": { "responseFormat": "json" } } }
+			},
+			"id": "http",
+			"name": "POST /v1/images/generations",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4,
+			"position": [480, 300]
+		},
+		{
+			"parameters": {
+				"operation": "decode",
+				"sourceProperty": "data[0].b64_json",
+				"binaryPropertyName": "data"
+			},
+			"id": "decode",
+			"name": "Base64 → binary",
+			"type": "n8n-nodes-base.moveBinaryData",
+			"typeVersion": 1,
+			"position": [720, 300]
+		}
+	],
+	"connections": {
+		"When clicking 'Test workflow'": {
+			"main": [[{ "node": "POST /v1/images/generations", "type": "main", "index": 0 }]]
+		},
+		"POST /v1/images/generations": {
+			"main": [[{ "node": "Base64 → binary", "type": "main", "index": 0 }]]
+		}
+	}
+}

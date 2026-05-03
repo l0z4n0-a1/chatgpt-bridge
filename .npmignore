@@ -1,0 +1,14 @@
+src/
+test/
+scripts/
+examples/
+.github/
+docs/
+node_modules/
+*.tsbuildinfo
+biome.json
+tsconfig.json
+.gitignore
+.npmrc
+*.png
+.bridge/

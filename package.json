@@ -1,0 +1,70 @@
+{
+	"name": "chatgpt-bridge",
+	"version": "0.1.0",
+	"description": "Localhost OpenAI-compatible HTTP proxy that uses your ChatGPT subscription via OAuth — including image generation (gpt-image-2).",
+	"keywords": [
+		"chatgpt",
+		"openai",
+		"oauth",
+		"proxy",
+		"cli",
+		"image-generation",
+		"gpt-image-2",
+		"openai-compatible",
+		"claude-code"
+	],
+	"license": "MIT",
+	"author": "João Gabriel Lozano <fluxmind.ia@gmail.com>",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/lozanojoaog/chatgpt-bridge.git"
+	},
+	"homepage": "https://github.com/lozanojoaog/chatgpt-bridge#readme",
+	"bugs": "https://github.com/lozanojoaog/chatgpt-bridge/issues",
+	"type": "module",
+	"bin": {
+		"chatgpt-bridge": "./dist/cli.js"
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md"
+	],
+	"scripts": {
+		"dev": "bun run src/cli.ts serve",
+		"build": "bun run scripts/build.ts",
+		"build:exe": "bun build src/cli.ts --compile --outfile dist/chatgpt-bridge",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test",
+		"format": "bunx @biomejs/biome format --write src test",
+		"lint": "bunx @biomejs/biome check src test"
+	},
+	"dependencies": {
+		"@hono/node-server": "^1.13.0",
+		"commander": "^12.1.0",
+		"hono": "^4.6.0",
+		"zod": "^3.25.76"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/node": "^20.17.24",
+		"bun-types": "^1.3.13",
+		"openai": "^4.70.0",
+		"typescript": "^5.6.0"
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

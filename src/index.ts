@@ -1,0 +1,19 @@
+/**
+ * Public library API. Use the bridge programmatically in any Node/Bun app.
+ *
+ *   import { createApp, generateImage, Auth, Upstream, loadConfig } from "chatgpt-bridge";
+ *
+ *   const cfg = loadConfig();
+ *   const auth = new Auth(cfg);
+ *   const upstream = new Upstream(cfg, auth);
+ *   const img = await generateImage(cfg, upstream, { prompt: "a fox" });
+ *   require("fs").writeFileSync("fox.png", Buffer.from(img.b64, "base64"));
+ */
+
+export { Auth, jwtClaims, tokenExpiryMs, accountIdFromIdToken } from "./auth.ts";
+export type { AuthFile, Tokens } from "./auth.ts";
+export { type Config, DEFAULTS, authFileCandidates, loadConfig } from "./config.ts";
+export { generateImage, ImageRequest } from "./images.ts";
+export type { ImageResult } from "./images.ts";
+export { createApp, startServer, VERSION } from "./server.ts";
+export { Upstream, UpstreamError, normalizeResponsesBody, parseSSE } from "./upstream.ts";

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.bridge/
+.chatgpt-bridge/
+*.log
+*.sqlite*
+auth.json
+.env
+.env.*
+*.tsbuildinfo
+.DS_Store
+bun.lock
+test-output*.png
+sdk-test*.png
