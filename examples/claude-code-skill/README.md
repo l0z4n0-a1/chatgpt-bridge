@@ -30,7 +30,7 @@ Claude will:
 
 ## Prereqs
 
-- [chatgpt-bridge](https://github.com/lozanojoaog/chatgpt-bridge) installed (`npm i -g chatgpt-bridge` or use `npx`).
+- [chatgpt-bridge](https://github.com/l0z4n0-a1/chatgpt-bridge) installed (`npm i -g chatgpt-bridge` or use `npx`).
 - One-time auth: `npx @openai/codex login`.
 
 That's it.

@@ -97,7 +97,7 @@ npm i -g chatgpt-bridge
 chatgpt-bridge serve
 ```
 
-Or download the standalone binary from [Releases](https://github.com/lozanojoaog/chatgpt-bridge/releases).
+Or download the standalone binary from [Releases](https://github.com/l0z4n0-a1/chatgpt-bridge/releases).
 
 ### `Cannot find module 'chatgpt-bridge'` in your code
 
@@ -117,7 +117,7 @@ npm i chatgpt-bridge   # in your project's directory
 
 ## When to file an issue
 
-Open one at https://github.com/lozanojoaog/chatgpt-bridge/issues with:
+Open one at https://github.com/l0z4n0-a1/chatgpt-bridge/issues with:
 
 1. Full output of `chatgpt-bridge doctor`.
 2. The exact request body (redact prompts if private).

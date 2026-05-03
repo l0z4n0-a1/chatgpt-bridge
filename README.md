@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/chatgpt-bridge.svg?color=cb3837&logo=npm)](https://www.npmjs.com/package/chatgpt-bridge)
 [![license: MIT](https://img.shields.io/npm/l/chatgpt-bridge.svg?color=blue)](./LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/lozanojoaog/chatgpt-bridge/ci.yml?branch=main&label=ci)](https://github.com/lozanojoaog/chatgpt-bridge/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/l0z4n0-a1/chatgpt-bridge/ci.yml?branch=main&label=ci)](https://github.com/l0z4n0-a1/chatgpt-bridge/actions)
 [![bundle size](https://img.shields.io/badge/published%20size-15.7%20KB-success)](https://www.npmjs.com/package/chatgpt-bridge)
 [![source size](https://img.shields.io/badge/source-~900%20LOC-informational)](./src)
 
@@ -95,7 +95,7 @@ require("fs").writeFileSync("fox.png", Buffer.from(img.b64, "base64"));
 
 ### Option D — Single binary
 
-Download from [Releases](https://github.com/lozanojoaog/chatgpt-bridge/releases): `chatgpt-bridge-linux`, `chatgpt-bridge-macos`, `chatgpt-bridge.exe`.
+Download from [Releases](https://github.com/l0z4n0-a1/chatgpt-bridge/releases): `chatgpt-bridge-linux`, `chatgpt-bridge-macos`, `chatgpt-bridge.exe`.
 
 ---
 
@@ -297,7 +297,7 @@ Full security model: [docs/security.md](./docs/security.md).
 The codebase is intentionally small (~900 LOC across 7 files). Read it end to end before opening a PR.
 
 ```bash
-git clone https://github.com/lozanojoaog/chatgpt-bridge.git
+git clone https://github.com/l0z4n0-a1/chatgpt-bridge.git
 cd chatgpt-bridge
 bun install
 bun run typecheck
@@ -313,6 +313,6 @@ For security issues: [SECURITY.md](./SECURITY.md). Do not file public issues.
 
 ## License
 
-MIT © [João Gabriel Lozano](https://github.com/lozanojoaog) — 2026
+MIT © [João Gabriel Lozano](https://github.com/l0z4n0-a1) — 2026
 
 This project is **clean-room implemented**. It contains no code copied from `openai-oauth`, `ima2-gen`, or any other source under non-MIT-compatible licenses. The OAuth flow follows RFC 6749 and the upstream contract is observed from public OpenAI documentation.

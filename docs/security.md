@@ -51,7 +51,7 @@ Please do **not** open a public issue for security reports.
 
 Email: **fluxmind.ia@gmail.com** with subject `chatgpt-bridge security`. Expect a reply within 72 hours. Coordinated disclosure preferred.
 
-For non-security bugs, open an issue: https://github.com/lozanojoaog/chatgpt-bridge/issues
+For non-security bugs, open an issue: https://github.com/l0z4n0-a1/chatgpt-bridge/issues
 
 ## OpenAI Terms
 

@@ -1,6 +1,6 @@
 {
 	"name": "chatgpt-bridge",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Localhost OpenAI-compatible HTTP proxy that uses your ChatGPT subscription via OAuth — including image generation (gpt-image-2).",
 	"keywords": [
 		"chatgpt",
@@ -17,10 +17,10 @@
 	"author": "João Gabriel Lozano <fluxmind.ia@gmail.com>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/lozanojoaog/chatgpt-bridge.git"
+		"url": "git+https://github.com/l0z4n0-a1/chatgpt-bridge.git"
 	},
-	"homepage": "https://github.com/lozanojoaog/chatgpt-bridge#readme",
-	"bugs": "https://github.com/lozanojoaog/chatgpt-bridge/issues",
+	"homepage": "https://github.com/l0z4n0-a1/chatgpt-bridge#readme",
+	"bugs": "https://github.com/l0z4n0-a1/chatgpt-bridge/issues",
 	"type": "module",
 	"bin": {
 		"chatgpt-bridge": "dist/cli.js"

@@ -143,13 +143,16 @@ export function createApp(cfg: Config) {
 			return asResponse(c, errBody("messages must be an array", "BAD_REQUEST", 400));
 		}
 		const wantStream = body.stream === true;
+		// Upstream Codex /responses requires stream:true. Always force it; if the
+		// caller wanted non-stream, we aggregate the SSE and return a single Chat
+		// completion object.
 		const upstreamBody: Record<string, unknown> = {
 			model: body.model ?? "gpt-5.2",
 			input: body.messages.map((m: any) => ({
 				role: m.role === "system" ? "developer" : m.role === "tool" ? "user" : m.role,
 				content: m.content,
 			})),
-			stream: wantStream,
+			stream: true,
 			store: false,
 			instructions: "",
 		};
@@ -161,19 +164,20 @@ export function createApp(cfg: Config) {
 				path: "/responses",
 				method: "POST",
 				body: upstreamBody,
-				stream: wantStream,
+				stream: true,
 			});
 			await upstream.raiseForStatus(res);
 
 			if (!wantStream) {
-				const j = (await res.json()) as Record<string, unknown>;
 				let text = "";
-				const out = (j.output as any[] | undefined) ?? [];
-				for (const item of out) {
-					if (item.type === "message" && Array.isArray(item.content)) {
-						for (const part of item.content) {
-							if (typeof part?.text === "string") text += part.text;
-						}
+				let usage: unknown;
+				for await (const ev of parseSSE(res)) {
+					if (ev.type === "response.output_text.delta") {
+						const delta = (ev.data as any).delta ?? "";
+						if (typeof delta === "string") text += delta;
+					}
+					if (ev.type === "response.completed") {
+						usage = (ev.data as any).response?.usage;
 					}
 				}
 				return c.json({
@@ -188,7 +192,7 @@ export function createApp(cfg: Config) {
 							finish_reason: "stop",
 						},
 					],
-					usage: j.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+					usage: usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
 				});
 			}
 
@@ -333,7 +337,7 @@ export function createApp(cfg: Config) {
 	return { app, auth, upstream };
 }
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 // Re-exported with this constant; /health and CLI both use it.
 // Bumping a release: change here + package.json + CHANGELOG.md.

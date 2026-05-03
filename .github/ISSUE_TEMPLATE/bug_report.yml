@@ -73,5 +73,5 @@ body:
           required: true
         - label: I removed all token values from the issue.
           required: true
-        - label: I searched [existing issues](https://github.com/lozanojoaog/chatgpt-bridge/issues) for duplicates.
+        - label: I searched [existing issues](https://github.com/l0z4n0-a1/chatgpt-bridge/issues) for duplicates.
           required: true
