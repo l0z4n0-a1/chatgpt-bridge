@@ -1,0 +1,12 @@
+# Enforce LF line endings for all text files. This prevents Windows from
+# converting LF → CRLF on checkout, which would otherwise make Biome
+# (and the formatter) flag every file as malformed.
+* text=auto eol=lf
+
+# Binary types — explicit so Git never tries to munge them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.tgz binary
