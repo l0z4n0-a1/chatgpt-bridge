@@ -30,8 +30,8 @@ if (!r.success) {
 	process.exit(1);
 }
 
-// Generate declarations via tsc emit.
-const tsc = Bun.spawn(["bunx", "tsc", "--emitDeclarationOnly", "--outDir", outDir, "--declaration"], {
+// Generate declarations via tsc using a build-specific tsconfig.
+const tsc = Bun.spawn(["bunx", "tsc", "-p", "tsconfig.build.json"], {
 	stdout: "inherit",
 	stderr: "inherit",
 });

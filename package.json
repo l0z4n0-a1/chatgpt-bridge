@@ -17,13 +17,13 @@
 	"author": "João Gabriel Lozano <fluxmind.ia@gmail.com>",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/lozanojoaog/chatgpt-bridge.git"
+		"url": "git+https://github.com/lozanojoaog/chatgpt-bridge.git"
 	},
 	"homepage": "https://github.com/lozanojoaog/chatgpt-bridge#readme",
 	"bugs": "https://github.com/lozanojoaog/chatgpt-bridge/issues",
 	"type": "module",
 	"bin": {
-		"chatgpt-bridge": "./dist/cli.js"
+		"chatgpt-bridge": "dist/cli.js"
 	},
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
