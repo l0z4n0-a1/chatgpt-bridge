@@ -4,6 +4,21 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added — CLI verbs (chat, image, models)
+
+- **`chatgpt-bridge chat <prompt|@file|->`** — send a text or multimodal message; print reply (streamed to tty by default, JSON when piped). `--attach <path|url>` (repeatable) for files/images. `--system <text|@file>` reads system prompt from string or file. `--model`, `--stream`/`--no-stream`, `--json`, `--dry-run`. Stdin `-` accepts a single prompt or JSONL batch (one job per line).
+- **`chatgpt-bridge image <prompt|@file|->`** — replaces `gen` (which is kept as a deprecated alias that warns and forwards). New `--ref <path|url>` (repeatable, max 8) for reference images. Same JSONL batch via stdin. Always emits JSON `{ok, file, bytes, latency_ms, revised_prompt}`.
+- **`chatgpt-bridge models`** — list available models (sorted, deduped, includes synthetic image aliases). Returns `{models: string[]}`.
+- **`@file` syntax** — any string flag accepting `--system @path.md`, `--prompt @brief.md`, etc., reads the file contents in place of the literal string.
+- **Stdin JSONL batch** — `chat -` and `image -` accept JSONL on stdin: one job object per line (e.g. `{"prompt":"a","ref":["mood.png"],"out":"a.png"}`). Each result is a JSON line on stdout. Exit code 0 if any job succeeded, 1 if none.
+- **Global `--dry-run`** on `chat`, `image`, `install` — validates inputs and prints what would be sent without calling upstream or writing files.
+- **Documented exit codes**: 0 ok, 1 user-error, 2 auth, 3 upstream, 4 rate-limited.
+
+### Internal
+
+- New module `src/io.ts` (~110 LOC) — single-responsibility I/O helpers: `resolveAtFile`, `parseStdin`, `readStdin`, `writeJson`, `writeError`, `classifyExitCode`, `isTty`. Keeps `cli.ts` focused on Commander wiring.
+- 10 new tests in `test/io.test.ts` covering `@file` resolution and JSONL detection (plain text vs. JSONL, blank-line tolerance, malformed-line line-number reporting).
+
 ### Added — multimodal input
 
 - **Vision input** in `/v1/chat/completions` — OpenAI vision shape (`{type:"image_url", image_url:{url}}` or string URL/data-URL) is translated to Responses `input_image` content parts. URLs pass through to upstream; the bridge does not fetch them.
