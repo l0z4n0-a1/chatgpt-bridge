@@ -12,6 +12,7 @@
  */
 
 import { z } from "zod";
+import { AttachmentSpec, resolveAttachments } from "./attachments.ts";
 import type { Config } from "./config.ts";
 import { type Upstream, UpstreamError, parseSSE } from "./upstream.ts";
 
@@ -25,6 +26,10 @@ export const ImageRequest = z
 		response_format: z.enum(["b64_json", "url"]).optional().default("b64_json"),
 		moderation: z.enum(["low", "auto"]).optional().default("low"),
 		user: z.string().optional(),
+		// Bridge extension (non-portable to api.openai.com): reference images
+		// shape style/composition. Each entry can be a path, URL, data-URL, or
+		// a structured {path|url|data,mime} object.
+		reference_images: z.array(AttachmentSpec).max(8).optional(),
 	})
 	.passthrough();
 
@@ -39,12 +44,31 @@ export interface ImageResult {
 const DEVELOPER_PROMPT =
 	"You are an image-generation assistant. Always invoke the image_generation tool. Pass the user's prompt through unchanged unless it is genuinely underspecified. Render at maximum technical quality for the chosen style. Do not add disclaimers.";
 
-function buildBody(cfg: Config, req: ImageRequest): Record<string, unknown> {
+const DEVELOPER_PROMPT_WITH_REFS =
+	"You are an image-generation assistant. The user has provided one or more reference images. Inspect them, then invoke the image_generation tool to render a NEW image whose style, composition, palette, and mood are coherent with the references — without copying them verbatim. Render at maximum technical quality. Do not add disclaimers.";
+
+async function buildBody(cfg: Config, req: ImageRequest): Promise<Record<string, unknown>> {
+	const refs = req.reference_images ?? [];
+	const hasRefs = refs.length > 0;
+
+	const userContent: Array<Record<string, unknown>> = [];
+	if (hasRefs) {
+		const { parts } = await resolveAttachments(refs, {}, cfg);
+		// Reference images first so the model "sees" them before reading the
+		// instruction. Empirically this produces stronger style transfer.
+		for (const p of parts) {
+			if (p.type === "input_image") userContent.push(p);
+		}
+		userContent.push({ type: "input_text", text: `Generate an image: ${req.prompt}` });
+	}
+
 	return {
 		model: cfg.imageModel,
 		input: [
-			{ role: "developer", content: DEVELOPER_PROMPT },
-			{ role: "user", content: `Generate an image: ${req.prompt}` },
+			{ role: "developer", content: hasRefs ? DEVELOPER_PROMPT_WITH_REFS : DEVELOPER_PROMPT },
+			hasRefs
+				? { role: "user", content: userContent }
+				: { role: "user", content: `Generate an image: ${req.prompt}` },
 		],
 		tools: [
 			{
@@ -54,7 +78,9 @@ function buildBody(cfg: Config, req: ImageRequest): Record<string, unknown> {
 				moderation: req.moderation,
 			},
 		],
-		tool_choice: "required",
+		// With references present the model needs latitude to look before
+		// invoking the tool. Without refs we keep the strict tool_choice.
+		tool_choice: hasRefs ? "auto" : "required",
 		reasoning: { effort: "low" },
 		stream: true,
 		store: false,
@@ -68,7 +94,7 @@ export async function generateImage(
 	req: ImageRequest,
 	signal?: AbortSignal,
 ): Promise<ImageResult> {
-	const body = buildBody(cfg, req);
+	const body = await buildBody(cfg, req);
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), cfg.timeoutMs);
 	const composed = signal ? AbortSignal.any([signal, ac.signal]) : ac.signal;

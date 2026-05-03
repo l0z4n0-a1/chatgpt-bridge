@@ -4,6 +4,21 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added — multimodal input
+
+- **Vision input** in `/v1/chat/completions` — OpenAI vision shape (`{type:"image_url", image_url:{url}}` or string URL/data-URL) is translated to Responses `input_image` content parts. URLs pass through to upstream; the bridge does not fetch them.
+- **File-as-context** in `/v1/chat/completions` — bridge extension content part `{type:"input_file", file:{path|url|data,mime,filename}}`. Local paths are read, base64-encoded, sent as `input_file`. Path-traversal guard blocks attempts to read `~/.codex/auth.json` or any auth-file candidate directory. 25 MiB per attachment, 100 MiB aggregate cap.
+- **Reference images** in `/v1/images/generations` — new optional `reference_images[]` field accepts paths, URLs, data-URLs, or `{path|url|data}` objects (max 8). Drives style/composition. When present, `tool_choice` flips from `required` to `auto` so the model can inspect references before generating.
+- **`AttachmentSpec`, `resolveAttachment`, `resolveAttachments`, `toContentPart`, `AttachmentError`** exported from the library entry point.
+- **`translateChatMessages`** exported for direct use by integrations that build their own Responses-API bodies.
+
+### Internal
+
+- New module `src/attachments.ts` (~290 LOC) — single-responsibility resolver. Handles MIME detection (extension + magic bytes), path safety (allowedRoot + forbiddenPaths derived from `authFileCandidates`), size caps, and produces ready-to-splice content parts.
+- `src/server.ts` chat translator (`translateChatMessages`) — maps OpenAI Chat parts to Responses parts, resolves bridge-extension `input_file` parts inline. Forward-compatible: unknown part types pass through verbatim.
+- `src/images.ts` — `ImageRequest` schema gains `reference_images?: AttachmentSpec[]` (max 8). `buildBody` is now async; injects `input_image` parts into the user turn when refs are provided.
+- 35 new tests across `attachments.test.ts` and `server.test.ts`: schema shapes, MIME detection, path traversal, size caps, vision translation, file-as-context, URL pass-through, schema cap of 8 refs.
+
 ### Added — agent-native core
 
 - **`chatgpt-bridge install --for <target>`** — one-shot, idempotent registration with 10 IDE/agent runtimes: `claude-code`, `claude-desktop`, `codex`, `cursor`, `zed`, `cline`, `continue`, `aider`, `gemini-cli`, `openai-sdk`, plus `all` (auto-detects installed runtimes, skips absent ones). Supports `--dry-run` and `--uninstall`. Agents never have to hand-edit MCP/config files again.

@@ -11,6 +11,7 @@
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { AttachmentError, resolveAttachment } from "./attachments.ts";
 import { Auth, tokenExpiryMs } from "./auth.ts";
 import type { Config } from "./config.ts";
 import { ImageRequest, generateImage } from "./images.ts";
@@ -39,6 +40,101 @@ function errBody(message: string, code: string, status: number) {
 function asResponse(c: any, body: ReturnType<typeof errBody>) {
 	const { _status, ...rest } = body;
 	return c.json(rest, _status);
+}
+
+/**
+ * Translate OpenAI Chat Completions messages → Responses API input.
+ *
+ * Mapping:
+ *   - role: "system" → "developer"; "tool" → "user"; others unchanged.
+ *   - content: string → unchanged (works on both shapes).
+ *   - content: array of parts → mapped per-part:
+ *       { type: "text",       text }         → { type: "input_text",  text }
+ *       { type: "image_url",  image_url }    → { type: "input_image", image_url }
+ *       { type: "input_text"|"input_image"|"input_file" }  → unchanged (Responses-native)
+ *       { type: "input_file", file: { path | url | data, mime, filename } }
+ *           → resolve via resolveAttachment, emit `input_file` content part.
+ *       unknown types → passed through (forward-compat).
+ */
+export async function translateChatMessages(
+	messages: Array<{ role: string; content: unknown }>,
+	cfg: Config,
+): Promise<Array<Record<string, unknown>>> {
+	const out: Array<Record<string, unknown>> = [];
+	for (const m of messages) {
+		const role = m.role === "system" ? "developer" : m.role === "tool" ? "user" : m.role;
+
+		// Plain string content: pass through.
+		if (typeof m.content === "string") {
+			out.push({ role, content: m.content });
+			continue;
+		}
+
+		if (!Array.isArray(m.content)) {
+			out.push({ role, content: m.content });
+			continue;
+		}
+
+		const parts: Array<Record<string, unknown>> = [];
+		for (const raw of m.content as Array<Record<string, unknown>>) {
+			const t = raw?.type;
+			if (t === "text") {
+				parts.push({ type: "input_text", text: raw.text });
+				continue;
+			}
+			if (t === "image_url") {
+				const ref = raw.image_url as string | { url: string } | undefined;
+				const url = typeof ref === "string" ? ref : ref?.url;
+				if (typeof url !== "string" || url.length === 0) {
+					throw new AttachmentError("image_url part missing url", "ATTACH_BAD_SHAPE");
+				}
+				parts.push({ type: "input_image", image_url: url });
+				continue;
+			}
+			if (t === "input_file" && raw.file && typeof raw.file === "object") {
+				const file = raw.file as {
+					path?: string;
+					url?: string;
+					data?: string;
+					mime?: string;
+					filename?: string;
+				};
+				const spec = file.path
+					? { path: file.path }
+					: file.url
+						? { url: file.url }
+						: file.data && file.mime
+							? {
+									data: file.data,
+									mime: file.mime,
+									...(file.filename ? { filename: file.filename } : {}),
+								}
+							: undefined;
+				if (!spec) {
+					throw new AttachmentError(
+						"input_file part requires file.path, file.url, or file.data+mime",
+						"ATTACH_BAD_SHAPE",
+					);
+				}
+				const resolved = await resolveAttachment(spec, {}, cfg);
+				if (resolved.kind === "image") {
+					parts.push({ type: "input_image", image_url: resolved.imageUrl });
+				} else {
+					parts.push({
+						type: "input_file",
+						filename: resolved.filename,
+						file_data: resolved.fileData,
+					});
+				}
+				continue;
+			}
+			// Unknown / Responses-native part: pass through verbatim so future
+			// content types from upstream just work without a bridge release.
+			parts.push(raw);
+		}
+		out.push({ role, content: parts });
+	}
+	return out;
 }
 
 export function createApp(cfg: Config) {
@@ -143,15 +239,26 @@ export function createApp(cfg: Config) {
 			return asResponse(c, errBody("messages must be an array", "BAD_REQUEST", 400));
 		}
 		const wantStream = body.stream === true;
+		// Translate Chat Completions messages → Responses input.
+		// Multimodal content parts (image_url, input_file, etc.) are mapped to
+		// their Responses equivalents. Bridge extension: `input_file` content
+		// parts may use { file: { path | url | data, mime } } and we resolve
+		// path/data into a base64 data URL on the fly.
+		let translatedInput: Array<Record<string, unknown>>;
+		try {
+			translatedInput = await translateChatMessages(body.messages, cfg);
+		} catch (e) {
+			if (e instanceof AttachmentError) {
+				return asResponse(c, errBody(e.message, e.code, 400));
+			}
+			throw e;
+		}
 		// Upstream Codex /responses requires stream:true. Always force it; if the
 		// caller wanted non-stream, we aggregate the SSE and return a single Chat
 		// completion object.
 		const upstreamBody: Record<string, unknown> = {
 			model: body.model ?? "gpt-5.2",
-			input: body.messages.map((m: any) => ({
-				role: m.role === "system" ? "developer" : m.role === "tool" ? "user" : m.role,
-				content: m.content,
-			})),
+			input: translatedInput,
 			stream: true,
 			store: false,
 			instructions: "",
